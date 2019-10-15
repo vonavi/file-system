@@ -1,7 +1,6 @@
 Set Implicit Arguments.
 Require Import Lists.List.
 Require Import Arith.PeanoNat.
-Require Import Max.
 Require Import Recdef.
 
 Definition Name := nat.
@@ -12,10 +11,8 @@ Inductive Inode : Set :=
   | dir : Name -> list Inode -> Inode.
 Definition FileSystem : Set := list Inode.
 
-Print PeanoNat.Nat.
-
 Lemma max_pair_lt : forall (n1 n2 m1 m2:nat),
-    n1 < n2 -> m1 < m2 -> Max.max n1 m1 < Max.max n2 m2.
+    n1 < n2 -> m1 < m2 -> Nat.max n1 m1 < Nat.max n2 m2.
 Proof.
   intros n1 n2 m1 m2 Hn Hm. apply Nat.max_lub_lt_iff. split.
   + cut (n2 <= Nat.max n2 m2); [| apply Nat.le_max_l].
@@ -39,11 +36,11 @@ Qed.
 Fixpoint inode_level (x:Inode) : nat :=
   match x with
   | file _ _ => S O
-  | dir _ fs' => S (fold_right (fun x => Max.max (inode_level x)) O fs')
+  | dir _ fs' => S (fold_right (fun x => Nat.max (inode_level x)) O fs')
   end.
 
 Definition fs_level (fs:FileSystem) : nat :=
-  fold_right (fun x => Max.max (inode_level x)) O fs.
+  fold_right (fun x => Nat.max (inode_level x)) O fs.
 
 Definition inode_level_split (x:Inode) : (Inode * FileSystem)%type :=
   match x with
@@ -77,18 +74,18 @@ Definition fs_level_split (fs:FileSystem) :
   in fold_right inode_acc (nil, nil) (map inode_split fs).
 
 Lemma fs_level_cons : forall (x:Inode) (fs:FileSystem),
-    fs_level (x :: fs) = Max.max (inode_level x) (fs_level fs).
+    fs_level (x :: fs) = Nat.max (inode_level x) (fs_level fs).
 Proof.
   intros x fs. unfold fs_level. unfold fold_right. reflexivity.
 Qed.
 
 Lemma fs_level_concat : forall (fs fs':FileSystem),
-    fs_level (fs ++ fs') = Max.max (fs_level fs) (fs_level fs').
+    fs_level (fs ++ fs') = Nat.max (fs_level fs) (fs_level fs').
 Proof.
   intros fs fs'. induction fs.
   + simpl. reflexivity.
   + rewrite <- app_comm_cons. do 2 rewrite -> fs_level_cons.
-    rewrite <- Max.max_assoc. f_equal. apply IHfs.
+    rewrite <- Nat.max_assoc. f_equal. apply IHfs.
 Qed.
 
 Lemma fs_level_split_cons : forall (x x':Inode) (fs l r r':FileSystem),
