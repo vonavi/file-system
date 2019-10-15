@@ -15,9 +15,9 @@ Lemma max_pair_lt : forall (n1 n2 m1 m2:nat),
     n1 < n2 -> m1 < m2 -> Nat.max n1 m1 < Nat.max n2 m2.
 Proof.
   intros n1 n2 m1 m2 Hn Hm. apply Nat.max_lub_lt_iff. split.
-  + cut (n2 <= Nat.max n2 m2); [| apply Nat.le_max_l].
+  + cut (n2 <= Nat.max n2 m2). 2:apply Nat.le_max_l.
     revert Hn. apply Nat.lt_le_trans.
-  + cut (m2 <= Nat.max n2 m2); [| apply Nat.le_max_r].
+  + cut (m2 <= Nat.max n2 m2). 2:apply Nat.le_max_r.
     revert Hm. apply Nat.lt_le_trans.
 Qed.
 
@@ -115,13 +115,13 @@ Proof.
   intros x x' fs. revert x x'. induction fs; intros x x' l r r' H H0.
   + unfold fs_level_split in H0. apply (f_equal snd) in H0. simpl in H0.
     rewrite <- H0. simpl. pose proof (inode_level_dec x) as Hi.
-    specialize (Hi x' r H). rewrite <- fs_inode_level in Hi. revert Hi.
+    specialize (Hi x' r H). rewrite <- fs_inode_level in Hi.
     do 2 rewrite Nat.max_0_r. auto.
   + remember (inode_level_split a) as pair1.
-    assert (H1: exists x' r, pair1 = (x', r)); [ apply pair_split |].
+    assert (H1: exists x' r, pair1 = (x', r)). 1:apply pair_split.
     rewrite -> Heqpair1 in H1. destruct H1 as [a' H1]. destruct H1 as [ar H1].
     remember (fs_level_split fs) as pair2.
-    assert (H2: exists l r', pair2 = (l, r')); [ apply pair_split |].
+    assert (H2: exists l r', pair2 = (l, r')). 1:apply pair_split.
     destruct H2 as [al H2]. destruct H2 as [ar' H2].
     specialize (IHfs a a' al ar ar' H1 H2). rewrite -> Heqpair2 in H2.
     rewrite -> (fs_level_split_cons a fs H1 H2) in H0.
@@ -136,21 +136,18 @@ Lemma fs_level_split_dec : forall (fs l r:FileSystem),
     fs <> nil -> fs_level_split fs = (l, r) -> fs_level r < fs_level fs.
 Proof.
   intros fs l'' r'' H. pose proof destruct_list as H0. specialize (H0 Inode fs).
-  destruct H0. 2:unfold not in H. 2:contradiction.
-  destruct s as [x H0]. destruct H0 as [fs' H0].
+  destruct H0. 2:contradiction. destruct s as [x H0]. destruct H0 as [fs' H0].
   remember (inode_level_split x) as pair1.
-  assert (H1: exists x' r, pair1 = (x', r)); [ apply pair_split |].
+  assert (H1: exists x' r, pair1 = (x', r)). 1:apply pair_split.
   rewrite -> Heqpair1 in H1. destruct H1 as [x' H1]. destruct H1 as [r H1].
   remember (fs_level_split fs') as pair2.
-  assert (H2: exists l r', pair2 = (l, r')); [ apply pair_split |].
+  assert (H2: exists l r', pair2 = (l, r')). 1:apply pair_split.
   rewrite -> Heqpair2 in H2. destruct H2 as [l H2]. destruct H2 as [r' H2].
-  assert (fs_level_split(x :: fs') = (x' :: l, r ++ r')).
-  + apply fs_level_split_cons. auto. apply H2.
-  + intro H4. rewrite -> H0 in H4. rewrite -> H3 in H4.
-    apply (f_equal snd) in H4. simpl in H4. rewrite <- H4.
-    rewrite fs_level_concat.
-    pose proof (fs_level_cons x fs') as Hm. rewrite <- H0 in Hm. rewrite -> Hm.
-    revert H1 H2. apply fs_inode_split_dec.
+  pose proof (fs_level_split_cons x fs' H1 H2) as Hpair.
+  intro H3. rewrite -> H0 in H3. rewrite -> Hpair in H3.
+  apply (f_equal snd) in H3. simpl in H3. rewrite <- H3.
+  pose proof (fs_level_cons x fs') as Hm. rewrite <- H0 in Hm. rewrite -> Hm.
+  rewrite fs_level_concat. apply (fs_inode_split_dec x fs' H1 H2).
 Qed.
 
 Function fs_fold_level (A:Type) (f:Inode->A->A) (a0:A) (fs:FileSystem)
@@ -164,20 +161,19 @@ Function fs_fold_level (A:Type) (f:Inode->A->A) (a0:A) (fs:FileSystem)
 Proof.
   intros A f a0 fs x fs' H.
   remember (inode_level_split x) as pair0.
-  assert (H0: exists x' r, pair0 = (x', r)); [ apply pair_split |].
+  assert (H0: exists x' r, pair0 = (x', r)). 1:apply pair_split.
   rewrite -> Heqpair0 in H0.
   destruct H0 as [x' H0]. destruct H0 as [r H0].
   remember (fs_level_split fs') as pair1.
-  assert (H1: exists l r', pair1 = (l, r')); [ apply pair_split |].
+  assert (H1: exists l r', pair1 = (l, r')). 1:apply pair_split.
   rewrite -> Heqpair1 in H1.
   destruct H1 as [l H1]. destruct H1 as [r' H1].
-  assert (fs_level_split(x :: fs') = (x' :: l, r ++ r')).
-  + apply fs_level_split_cons. auto. apply H1.
-  + intros l'' r'' Hpair. rewrite -> H2 in Hpair.
-    apply (f_equal snd) in Hpair. simpl in Hpair. rewrite <- Hpair.
-    revert H2. cut (x :: fs' <> nil).
-    * apply fs_level_split_dec.
-    * unfold not. intro Hnil. discriminate Hnil.
+  pose proof (fs_level_split_cons x fs' H0 H1) as H2.
+  intros l'' r'' Hpair. rewrite -> H2 in Hpair.
+  apply (f_equal snd) in Hpair. simpl in Hpair. rewrite <- Hpair.
+  revert H2. cut (x :: fs' <> nil).
+  + apply fs_level_split_dec.
+  + unfold not. intro Hnil. discriminate Hnil.
 Qed.
 
 Definition fs_inode_total (fs:FileSystem) : nat :=
