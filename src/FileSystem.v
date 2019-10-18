@@ -57,8 +57,7 @@ Lemma inode_level_dec : forall (x x':Inode) (r:FileSystem),
     inode_level_split x = (x', r) -> fs_level r < fs_level (x::nil).
 Proof.
   intros x x' r.
-  destruct x; unfold inode_level_split; intro H; apply (f_equal snd) in H;
-    simpl in H; rewrite <- H; auto.
+  destruct x; unfold inode_level_split; intro H; inversion H; auto.
 Qed.
 
 Definition fs_level_split (fs:FileSystem) :
@@ -113,10 +112,9 @@ Lemma fs_inode_split_dec : forall (x x':Inode) (fs l r r':FileSystem),
     Nat.max (fs_level r) (fs_level r') < Nat.max (inode_level x) (fs_level fs).
 Proof.
   intros x x' fs. revert x x'. induction fs; intros x x' l r r' H H0.
-  - unfold fs_level_split in H0. apply (f_equal snd) in H0. simpl in H0.
-    rewrite <- H0. simpl. pose proof (inode_level_dec x) as Hi.
-    specialize (Hi x' r H). rewrite <- fs_inode_level in Hi.
-    do 2 rewrite Nat.max_0_r. auto.
+  - unfold fs_level_split in H0. inversion H0. simpl.
+    pose proof (inode_level_dec x) as Hi. specialize (Hi x' r H).
+    rewrite <- fs_inode_level in Hi. do 2 rewrite Nat.max_0_r. auto.
   - remember (inode_level_split a) as pair1.
     assert (H1: exists x' r, pair1 = (x', r)). 1:apply pair_split.
     rewrite -> Heqpair1 in H1. destruct H1 as [a' H1]. destruct H1 as [ar H1].
@@ -124,8 +122,7 @@ Proof.
     assert (H2: exists l r', pair2 = (l, r')). 1:apply pair_split.
     destruct H2 as [al H2]. destruct H2 as [ar' H2].
     specialize (IHfs a a' al ar ar' H1 H2). rewrite -> Heqpair2 in H2.
-    rewrite -> (fs_level_split_cons a fs H1 H2) in H0.
-    apply (f_equal snd) in H0. simpl in H0. rewrite <- H0.
+    rewrite -> (fs_level_split_cons a fs H1 H2) in H0. inversion H0.
     rewrite -> fs_level_concat. rewrite -> fs_level_cons.
     assert (fs_level r < inode_level x).
     + rewrite -> fs_inode_level. revert H. apply inode_level_dec.
@@ -144,8 +141,7 @@ Proof.
   assert (H2: exists l r', pair2 = (l, r')). 1:apply pair_split.
   rewrite -> Heqpair2 in H2. destruct H2 as [l H2]. destruct H2 as [r' H2].
   pose proof (fs_level_split_cons x fs' H1 H2) as Hpair.
-  intro H3. rewrite -> H0 in H3. rewrite -> Hpair in H3.
-  apply (f_equal snd) in H3. simpl in H3. rewrite <- H3.
+  intro H3. rewrite -> H0 in H3. rewrite -> Hpair in H3. inversion H3.
   pose proof (fs_level_cons x fs') as Hm. rewrite <- H0 in Hm. rewrite -> Hm.
   rewrite fs_level_concat. apply (fs_inode_split_dec x fs' H1 H2).
 Qed.
@@ -169,8 +165,7 @@ Proof.
   rewrite -> Heqpair1 in H1.
   destruct H1 as [l H1]. destruct H1 as [r' H1].
   pose proof (fs_level_split_cons x fs' H0 H1) as H2.
-  intros l'' r'' Hpair. rewrite -> H2 in Hpair.
-  apply (f_equal snd) in Hpair. simpl in Hpair. rewrite <- Hpair.
+  intros l'' r'' Hpair. rewrite -> H2 in Hpair. inversion Hpair.
   revert H2. cut (x :: fs' <> nil).
   - apply fs_level_split_dec.
   - unfold not. intro Hnil. discriminate Hnil.
