@@ -1,4 +1,5 @@
 Set Implicit Arguments.
+Require Import FunInd.
 Require Import Lists.List.
 Require Import Arith.PeanoNat.
 Require Import Recdef.
@@ -169,6 +170,75 @@ Proof.
   revert H2. cut (x :: fs' <> nil).
   - apply fs_level_split_dec.
   - unfold not. intro Hnil. discriminate Hnil.
+Qed.
+
+Lemma fs_fold_level_nil : forall (A:Type) (f:Inode->A->A) (a0:A),
+    fs_fold_level f a0 nil = a0.
+Proof.
+  intros A f a0. remember nil as fs.
+  functional induction (fs_fold_level f a0 fs). 1:reflexivity.
+  unfold fs_level_split in e0. inversion e0. symmetry in H1.
+  specialize (IHa H1). rewrite -> H1 in IHa. rewrite -> IHa. reflexivity.
+Qed.
+
+Lemma fs_fold_level_cons :
+  forall (A:Type) (f:Inode->A->A) (a0:A) (fs l r:FileSystem),
+    fs_level_split fs = (l, r) ->
+    fs_fold_level f a0 fs = fold_right f (fs_fold_level f a0 r) l.
+Proof.
+  intros A f a0 fs.
+  functional induction (fs_fold_level f a0 fs); intros l' r' H.
+  - unfold fs_level_split in H. simpl in H. inversion H.
+    rewrite -> fs_fold_level_nil. reflexivity.
+  - rewrite -> e0 in H. inversion H. reflexivity.
+Qed.
+
+Lemma fs_level_split_left :
+  forall (A:Type) (f:Inode->A->A) (a0:A) (fs l r:FileSystem),
+    fs_level_split fs = (l, r) -> fs_level_split l = (l, nil).
+Proof.
+  intros A f a0 fs. induction fs; intros l r H.
+  assert (fs_level_split nil = (nil, nil)).
+  - unfold fs_level_split. reflexivity.
+  - rewrite -> H0 in H. inversion H. assumption.
+  - remember (fs_level_split fs) as pair. rewrite -> Heqpair in IHfs.
+    assert (H0: exists l' r', pair = (l', r')). 1:apply pair_split.
+    rewrite -> Heqpair in H0. clear pair Heqpair.
+    destruct H0 as [l' H0]. destruct H0 as [r' H0]. specialize (IHfs l' r' H0).
+    remember (inode_level_split a) as pair.
+    assert (H1: exists x' r'', pair = (x', r'')). 1:apply pair_split.
+    rewrite -> Heqpair in H1. clear pair Heqpair.
+    destruct H1 as [x' H1]. destruct H1 as [r'' H1].
+    rewrite -> (fs_level_split_cons a fs H1 H0) in H. inversion H.
+    apply (f_equal fst) in IHfs as Hfst. simpl in Hfst.
+    apply (f_equal snd) in IHfs as Hsnd. simpl in Hsnd. clear IHfs.
+    apply (f_equal fst) in H1. unfold inode_level_split in H1.
+    assert (fst (fs_level_split (x' :: l')) = x' :: l').
+    2:assert (snd (fs_level_split (x' :: l')) = nil).
+    + pattern l' at 2. rewrite <- Hfst. unfold fs_level_split.
+      rewrite -> map_cons. destruct a; simpl in H1; rewrite <- H1; reflexivity.
+    + rewrite <- Hsnd. unfold fs_level_split. rewrite -> map_cons.
+      destruct a; simpl in H1; rewrite <- H1; reflexivity.
+    + clear Hfst Hsnd. remember nil as r0. remember (x' :: l', r0).
+      apply (f_equal fst) in Heqp as Hfst. simpl in Hfst. rewrite <- H2 in Hfst.
+      apply (f_equal snd) in Heqp as Hsnd. simpl in Hsnd. rewrite <- H5 in Hsnd.
+      rewrite -> Heqp in Hfst. symmetry in Hfst.
+      rewrite -> Heqp in Hsnd. symmetry in Hsnd.
+      revert Hfst Hsnd. apply injective_projections.
+Qed.
+
+Lemma fs_fold_level_left :
+  forall (A:Type) (f:Inode->A->A) (a0:A) (fs l r:FileSystem),
+    fs_level_split fs = (l, r) -> fs_fold_level f a0 l = fold_right f a0 l.
+Proof.
+  intros A f a0 fs.
+  functional induction (fs_fold_level f a0 fs); intros l' r' H.
+  - unfold fs_level_split in H. simpl in H. inversion H.
+    rewrite fs_fold_level_nil. reflexivity.
+  - rewrite -> e0 in H. inversion H. rewrite <- H1. clear H H1 H2 l' r'.
+    pose proof (fs_level_split_left f a0 fs) as H0. specialize (H0 l r e0).
+    pose proof (fs_fold_level_cons f a0 l) as H1. specialize (H1 l nil H0).
+    rewrite fs_fold_level_nil in H1. assumption.
 Qed.
 
 Definition fs_inode_total (fs:FileSystem) : nat :=
