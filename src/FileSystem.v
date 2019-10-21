@@ -26,7 +26,7 @@ Lemma pair_split : forall (A B:Type) (p:(A * B)%type),
     exists (x:A) (y:B), p = (x, y).
 Proof.
   intros A B p. remember (fst p) as x. remember (snd p) as y.
-  exists x. exists y. rewrite -> Heqx. rewrite -> Heqy.
+  exists x. exists y. rewrite Heqx. rewrite Heqy.
   assert (Hfst: fst p = fst (fst p, snd p)).
   2:assert (Hsnd: snd p = snd (fst p, snd p)).
   - reflexivity.
@@ -84,7 +84,7 @@ Lemma fs_level_concat : forall (fs fs':FileSystem),
 Proof.
   intros fs fs'. induction fs.
   - simpl. reflexivity.
-  - rewrite <- app_comm_cons. do 2 rewrite -> fs_level_cons.
+  - rewrite <- app_comm_cons. do 2 rewrite fs_level_cons.
     rewrite <- Nat.max_assoc. f_equal. apply IHfs.
 Qed.
 
@@ -95,11 +95,11 @@ Proof.
   intros.
   assert (Hfst: fst (fs_level_split (x :: fs)) = x' :: l).
   2:assert (Hsnd: snd (fs_level_split (x :: fs)) = r ++ r').
-  - unfold fs_level_split. rewrite -> map_cons. unfold fold_right. simpl.
+  - unfold fs_level_split. rewrite map_cons. unfold fold_right. simpl.
     apply hd_error_tl_repr. simpl. split.
     + apply (f_equal fst) in H. simpl in H. rewrite <- H. reflexivity.
     + apply (f_equal fst) in H0. simpl in H0. rewrite <- H0. reflexivity.
-  - unfold fs_level_split. rewrite -> map_cons. unfold fold_right. simpl.
+  - unfold fs_level_split. rewrite map_cons. unfold fold_right. simpl.
     apply (f_equal snd) in H. simpl in H. rewrite <- H.
     apply (f_equal snd) in H0. simpl in H0. rewrite <- H0. reflexivity.
   - remember (x' :: l, r ++ r') as pair.
@@ -118,15 +118,15 @@ Proof.
     rewrite <- fs_inode_level in Hi. do 2 rewrite Nat.max_0_r. auto.
   - remember (inode_level_split a) as pair1.
     assert (H1: exists x' r, pair1 = (x', r)). 1:apply pair_split.
-    rewrite -> Heqpair1 in H1. destruct H1 as [a' H1]. destruct H1 as [ar H1].
+    rewrite Heqpair1 in H1. destruct H1 as [a' H1]. destruct H1 as [ar H1].
     remember (fs_level_split fs) as pair2.
     assert (H2: exists l r', pair2 = (l, r')). 1:apply pair_split.
     destruct H2 as [al H2]. destruct H2 as [ar' H2].
-    specialize (IHfs a a' al ar ar' H1 H2). rewrite -> Heqpair2 in H2.
-    rewrite -> (fs_level_split_cons a fs H1 H2) in H0. inversion H0.
-    rewrite -> fs_level_concat. rewrite -> fs_level_cons.
+    specialize (IHfs a a' al ar ar' H1 H2). rewrite Heqpair2 in H2.
+    rewrite (fs_level_split_cons a fs H1 H2) in H0. inversion H0.
+    rewrite fs_level_concat. rewrite fs_level_cons.
     assert (fs_level r < inode_level x).
-    + rewrite -> fs_inode_level. revert H. apply inode_level_dec.
+    + rewrite fs_inode_level. revert H. apply inode_level_dec.
     + revert H3 IHfs. apply max_pair_lt.
 Qed.
 
@@ -137,13 +137,13 @@ Proof.
   destruct H0. 2:contradiction. destruct s as [x H0]. destruct H0 as [fs' H0].
   remember (inode_level_split x) as pair1.
   assert (H1: exists x' r, pair1 = (x', r)). 1:apply pair_split.
-  rewrite -> Heqpair1 in H1. destruct H1 as [x' H1]. destruct H1 as [r H1].
+  rewrite Heqpair1 in H1. destruct H1 as [x' H1]. destruct H1 as [r H1].
   remember (fs_level_split fs') as pair2.
   assert (H2: exists l r', pair2 = (l, r')). 1:apply pair_split.
-  rewrite -> Heqpair2 in H2. destruct H2 as [l H2]. destruct H2 as [r' H2].
+  rewrite Heqpair2 in H2. destruct H2 as [l H2]. destruct H2 as [r' H2].
   pose proof (fs_level_split_cons x fs' H1 H2) as Hpair.
-  intro H3. rewrite -> H0 in H3. rewrite -> Hpair in H3. inversion H3.
-  pose proof (fs_level_cons x fs') as Hm. rewrite <- H0 in Hm. rewrite -> Hm.
+  intro H3. rewrite H0 in H3. rewrite Hpair in H3. inversion H3.
+  pose proof (fs_level_cons x fs') as Hm. rewrite <- H0 in Hm. rewrite Hm.
   rewrite fs_level_concat. apply (fs_inode_split_dec x fs' H1 H2).
 Qed.
 
@@ -159,14 +159,12 @@ Proof.
   intros A f a0 fs x fs' H.
   remember (inode_level_split x) as pair0.
   assert (H0: exists x' r, pair0 = (x', r)). 1:apply pair_split.
-  rewrite -> Heqpair0 in H0.
-  destruct H0 as [x' H0]. destruct H0 as [r H0].
+  rewrite Heqpair0 in H0. destruct H0 as [x' H0]. destruct H0 as [r H0].
   remember (fs_level_split fs') as pair1.
   assert (H1: exists l r', pair1 = (l, r')). 1:apply pair_split.
-  rewrite -> Heqpair1 in H1.
-  destruct H1 as [l H1]. destruct H1 as [r' H1].
+  rewrite Heqpair1 in H1. destruct H1 as [l H1]. destruct H1 as [r' H1].
   pose proof (fs_level_split_cons x fs' H0 H1) as H2.
-  intros l'' r'' Hpair. rewrite -> H2 in Hpair. inversion Hpair.
+  intros l'' r'' Hpair. rewrite H2 in Hpair. inversion Hpair.
   revert H2. cut (x :: fs' <> nil).
   - apply fs_level_split_dec.
   - unfold not. intro Hnil. discriminate Hnil.
@@ -178,7 +176,7 @@ Proof.
   intros A f a0. remember nil as fs.
   functional induction (fs_fold_level f a0 fs). 1:reflexivity.
   unfold fs_level_split in e0. inversion e0. symmetry in H1.
-  specialize (IHa H1). rewrite -> H1 in IHa. rewrite -> IHa. reflexivity.
+  specialize (IHa H1). rewrite H1 in IHa. rewrite IHa. reflexivity.
 Qed.
 
 Lemma fs_fold_level_cons :
@@ -189,8 +187,8 @@ Proof.
   intros A f a0 fs.
   functional induction (fs_fold_level f a0 fs); intros l' r' H.
   - unfold fs_level_split in H. simpl in H. inversion H.
-    rewrite -> fs_fold_level_nil. reflexivity.
-  - rewrite -> e0 in H. inversion H. reflexivity.
+    rewrite fs_fold_level_nil. reflexivity.
+  - rewrite e0 in H. inversion H. reflexivity.
 Qed.
 
 Lemma fs_level_split_left :
@@ -200,30 +198,30 @@ Proof.
   intros A f a0 fs. induction fs; intros l r H.
   assert (fs_level_split nil = (nil, nil)).
   - unfold fs_level_split. reflexivity.
-  - rewrite -> H0 in H. inversion H. assumption.
-  - remember (fs_level_split fs) as pair. rewrite -> Heqpair in IHfs.
+  - rewrite H0 in H. inversion H. assumption.
+  - remember (fs_level_split fs) as pair. rewrite Heqpair in IHfs.
     assert (H0: exists l' r', pair = (l', r')). 1:apply pair_split.
-    rewrite -> Heqpair in H0. clear pair Heqpair.
+    rewrite Heqpair in H0. clear pair Heqpair.
     destruct H0 as [l' H0]. destruct H0 as [r' H0]. specialize (IHfs l' r' H0).
     remember (inode_level_split a) as pair.
     assert (H1: exists x' r'', pair = (x', r'')). 1:apply pair_split.
-    rewrite -> Heqpair in H1. clear pair Heqpair.
+    rewrite Heqpair in H1. clear pair Heqpair.
     destruct H1 as [x' H1]. destruct H1 as [r'' H1].
-    rewrite -> (fs_level_split_cons a fs H1 H0) in H. inversion H.
+    rewrite (fs_level_split_cons a fs H1 H0) in H. inversion H.
     apply (f_equal fst) in IHfs as Hfst. simpl in Hfst.
     apply (f_equal snd) in IHfs as Hsnd. simpl in Hsnd. clear IHfs.
     apply (f_equal fst) in H1. unfold inode_level_split in H1.
     assert (fst (fs_level_split (x' :: l')) = x' :: l').
     2:assert (snd (fs_level_split (x' :: l')) = nil).
     + pattern l' at 2. rewrite <- Hfst. unfold fs_level_split.
-      rewrite -> map_cons. destruct a; simpl in H1; rewrite <- H1; reflexivity.
-    + rewrite <- Hsnd. unfold fs_level_split. rewrite -> map_cons.
+      rewrite map_cons. destruct a; simpl in H1; rewrite <- H1; reflexivity.
+    + rewrite <- Hsnd. unfold fs_level_split. rewrite map_cons.
       destruct a; simpl in H1; rewrite <- H1; reflexivity.
     + clear Hfst Hsnd. remember nil as r0. remember (x' :: l', r0).
       apply (f_equal fst) in Heqp as Hfst. simpl in Hfst. rewrite <- H2 in Hfst.
       apply (f_equal snd) in Heqp as Hsnd. simpl in Hsnd. rewrite <- H5 in Hsnd.
-      rewrite -> Heqp in Hfst. symmetry in Hfst.
-      rewrite -> Heqp in Hsnd. symmetry in Hsnd.
+      rewrite Heqp in Hfst. symmetry in Hfst.
+      rewrite Heqp in Hsnd. symmetry in Hsnd.
       revert Hfst Hsnd. apply injective_projections.
 Qed.
 
@@ -235,7 +233,7 @@ Proof.
   functional induction (fs_fold_level f a0 fs); intros l' r' H.
   - unfold fs_level_split in H. simpl in H. inversion H.
     rewrite fs_fold_level_nil. reflexivity.
-  - rewrite -> e0 in H. inversion H. rewrite <- H1. clear H H1 H2 l' r'.
+  - rewrite e0 in H. inversion H. rewrite <- H1. clear H H1 H2 l' r'.
     pose proof (fs_level_split_left f a0 fs) as H0. specialize (H0 l r e0).
     pose proof (fs_fold_level_cons f a0 l) as H1. specialize (H1 l nil H0).
     rewrite fs_fold_level_nil in H1. assumption.
