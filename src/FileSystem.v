@@ -3,6 +3,7 @@ Require Import FunInd.
 Require Import Lists.List.
 Require Import Arith.PeanoNat.
 Require Import Recdef.
+Require Import ArithRing.
 
 Definition Name := nat.
 Inductive Storage := L | R.     (* Local / Remote *)
@@ -106,6 +107,29 @@ Proof.
     apply (f_equal fst) in Heqpair as H1. simpl in H1. rewrite <- H1 in Hfst.
     apply (f_equal snd) in Heqpair as H2. simpl in H2. rewrite <- H2 in Hsnd.
     revert Hfst Hsnd. apply injective_projections.
+Qed.
+
+Lemma fs_level_split_concat : forall (fs l r fs' l' r':FileSystem),
+    fs_level_split fs = (l, r) -> fs_level_split fs' = (l', r') ->
+    fs_level_split (fs ++ fs') = (l ++ l', r ++ r').
+Proof.
+  intros fs l r fs' l' r'. revert l r l' r'. induction fs; intros.
+  - unfold fs_level_split in H. simpl in H. inversion H.
+    do 3 rewrite app_nil_l. assumption.
+  - rename l into al'. rename r into ar'.
+    remember (inode_level_split a) as p.
+    assert (H1: exists a' ar, p = (a', ar)). 1:apply pair_split.
+    rewrite Heqp in H1. clear Heqp p.
+    destruct H1 as [a' H1]. destruct H1 as [ar H1].
+    remember (fs_level_split fs) as p. rewrite Heqp in IHfs.
+    assert (H2: exists l r, p = (l, r)). 1:apply pair_split.
+    rewrite Heqp in H2. clear Heqp p.
+    destruct H2 as [l H2]. destruct H2 as [r H2].
+    specialize (IHfs l r l' r' H2 H0).
+    pose proof (fs_level_split_cons a (fs ++ fs') H1 IHfs).
+    rewrite <- app_comm_cons. rewrite H3.
+    rewrite (fs_level_split_cons a fs H1 H2) in H. inversion H.
+    rewrite app_comm_cons. rewrite app_assoc. split.
 Qed.
 
 Lemma fs_inode_split_dec : forall (x x':Inode) (fs l r r':FileSystem),
@@ -241,3 +265,78 @@ Qed.
 
 Definition fs_inode_total (fs:FileSystem) : nat :=
   fs_fold_level (fun _ => S) O fs.
+
+Lemma fs_inode_total_sum : forall (fs l r:FileSystem),
+    fs_level_split fs = (l, r) ->
+    fs_inode_total fs = fs_inode_total l + fs_inode_total r.
+Proof.
+  intros fs. unfold fs_inode_total.
+  functional induction (fs_fold_level (fun _ => S) O fs); intros l' r' H.
+  - unfold fs_level_split in H. simpl in H. inversion H.
+    rewrite fs_fold_level_nil. reflexivity.
+  - rewrite e0 in H. inversion H. rewrite <- H1. rewrite <- H2.
+    clear H H1 H2 l' r'. remember (fs_fold_level (fun _ => S) O r) as c.
+    pose proof (fs_fold_level_left (fun _ => S) O fs) as H.
+    specialize (H l r e0). rewrite H. clear e0 Heqc IHs H fs y r.
+    induction l. 1:reflexivity.
+    assert (fold_right (fun _ => S) c (a :: l) = S (fold_right (fun _ => S) c l)).
+    1:reflexivity. rewrite H. rewrite IHl. reflexivity.
+Qed.
+
+Lemma fs_inode_total_left : forall (fs l r:FileSystem),
+    fs_level_split fs = (l, r) -> fs_inode_total l = length l.
+Proof.
+  intros fs. induction fs; intros.
+  - unfold fs_level_split in H. simpl in H. inversion H.
+    unfold fs_inode_total. rewrite fs_fold_level_nil. reflexivity.
+  - remember (inode_level_split a) as p.
+    assert (H0: exists a' ar, p = (a', ar)). 1:apply pair_split.
+    rewrite Heqp in H0. clear p Heqp.
+    destruct H0 as [a' H0]. destruct H0 as [ar H0].
+    remember (fs_level_split fs) as p. rewrite Heqp in IHfs.
+    assert (H1: exists l' r', p = (l', r')). 1:apply pair_split.
+    rewrite Heqp in H1. clear p Heqp.
+    destruct H1 as [l' H1]. destruct H1 as [r' H1].
+    pose proof (fs_level_split_cons a fs H0 H1). rewrite H in H2. inversion H2.
+    specialize (IHfs l' r' H1). rewrite H2 in H. unfold fs_inode_total.
+    pose proof (fs_fold_level_left (fun _ => S) O) as Hl.
+    rewrite (Hl (a :: fs) (a' :: l') (ar ++ r') H). specialize (Hl fs l' r' H1).
+    unfold fs_inode_total in IHfs. rewrite Hl in IHfs.
+    unfold fold_right. unfold fold_right in IHfs. rewrite IHfs. auto.
+Qed.
+
+Lemma fs_inode_total_cons : forall (fs l r:FileSystem),
+    fs_level_split fs = (l, r) ->
+    fs_inode_total fs = length l + fs_inode_total r.
+Proof.
+  intros. unfold fs_inode_total. rewrite (fs_fold_level_cons (fun _ => S) O fs H).
+  remember (fs_fold_level (fun _ => S) O r) as k. clear H fs Heqk r. induction l.
+  - reflexivity.
+  - simpl. rewrite IHl. reflexivity.
+Qed.
+
+Lemma fs_inode_total_concat : forall (fs fs':FileSystem),
+     fs_inode_total (fs ++ fs') = fs_inode_total fs + fs_inode_total fs'.
+Proof.
+  intro fs. unfold fs_inode_total.
+  functional induction (fs_fold_level (fun _ => S) O fs); intro fs'.
+  - rewrite app_nil_l. reflexivity.
+  - functional induction (fs_fold_level (fun _ => S) O fs').
+    + rewrite app_nil_r. rewrite (fs_fold_level_cons (fun _ => S) O fs e0). auto.
+    + pose proof (fs_level_split_concat fs fs0 e0 e1).
+      pose proof (fs_inode_total_sum (fs ++ fs0) H).
+      unfold fs_inode_total in H0. rewrite H0. clear H0.
+      specialize (IHs r0). rewrite IHs. clear IHs IHs0.
+      remember (fs_inode_total fs) as p. assert (Htmp := Heqp).
+      unfold fs_inode_total in Htmp.
+      rewrite (fs_fold_level_cons (fun _ => S) O fs e0) in Htmp.
+      rewrite <- Htmp. rewrite Heqp. clear Heqp Htmp p.
+      remember (fs_inode_total fs0) as p. assert (Htmp := Heqp).
+      unfold fs_inode_total in Htmp.
+      rewrite (fs_fold_level_cons (fun _ => S) O fs0 e1) in Htmp.
+      rewrite <- Htmp. rewrite Heqp. clear Heqp Htmp p.
+      rewrite (fs_inode_total_cons fs e0). rewrite (fs_inode_total_cons fs0 e1).
+      pose proof (fs_inode_total_left (fs ++ fs0) H).
+      unfold fs_inode_total in H0. rewrite H0.
+      unfold fs_inode_total. rewrite app_length. ring.
+Qed.
