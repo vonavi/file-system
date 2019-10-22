@@ -340,3 +340,66 @@ Proof.
       unfold fs_inode_total in H0. rewrite H0.
       unfold fs_inode_total. rewrite app_length. ring.
 Qed.
+
+Lemma fs_inode_total_ge_0 : forall (fs:FileSystem), fs_inode_total fs >= 0.
+Proof.
+  intro fs. functional induction (fs_fold_level (fun _ => S) O fs).
+  - unfold fs_inode_total. rewrite fs_fold_level_nil. auto.
+  - rewrite (fs_inode_total_cons fs e0). clear e0.
+    cut (fs_inode_total r <= length l + fs_inode_total r).
+    + revert IHs. unfold ge. apply Nat.le_trans.
+    + clear IHs. induction l. 1:auto. simpl. revert IHl. apply Nat.le_le_succ_r.
+Qed.
+
+Function fs_map_inode (f:Inode->Inode) (fs:FileSystem)
+         {measure fs_inode_total fs} : FileSystem :=
+  match fs with
+  | nil => nil
+  | x::fs' =>
+    let x' := match x with
+              | file _ _ => f x
+              | dir n fs'' => dir n (fs_map_inode f fs'')
+              end
+    in x' :: fs_map_inode f fs'
+  end.
+Proof.
+  - intros. clear f teq fs. rewrite <- teq0.
+    assert (x :: fs' = (x :: nil) ++ fs'). 1:auto. rewrite H.
+    clear H. rewrite fs_inode_total_concat.
+    cut (0 < fs_inode_total (x :: nil)). apply Nat.lt_add_pos_l. clear fs'.
+    remember (fs_level_split (file n s :: nil)) as p. assert (H := Heqp).
+    unfold fs_level_split in H. simpl in H. rewrite Heqp in H. clear Heqp p.
+    rewrite teq0. rewrite (fs_inode_total_cons (file n s :: nil) H).
+    unfold fs_inode_total. rewrite fs_fold_level_nil. auto.
+  - intros. clear f teq fs. rewrite <- teq0.
+    assert (x :: fs' = (x :: nil) ++ fs'). 1:auto. rewrite H. clear H.
+    rewrite fs_inode_total_concat.
+    cut (0 < fs_inode_total (x :: nil)). apply Nat.lt_add_pos_l. clear fs'.
+    remember (fs_level_split (dir n fs'' :: nil)) as p.
+    assert (H := Heqp). unfold fs_level_split in H. simpl in H.
+    rewrite app_nil_r in H. rewrite Heqp in H. clear Heqp p.
+    rewrite teq0. rewrite (fs_inode_total_cons (dir n fs'' :: nil) H).
+    simpl. cut (0 <= fs_inode_total fs''). apply Nat.lt_succ_r.
+    apply fs_inode_total_ge_0.
+  - intros. clear f teq fs.
+    assert (dir n fs'' :: fs' = (dir n fs'' :: nil) ++ fs'). 1:auto. rewrite H.
+    clear H. rewrite fs_inode_total_concat. rewrite <- teq0.
+    cut (fs_inode_total (x :: nil) <=
+         fs_inode_total (x :: nil) + fs_inode_total fs').
+    cut (fs_inode_total fs'' < fs_inode_total (x :: nil)).
+    + apply Nat.lt_le_trans.
+    + rewrite teq0. remember (fs_level_split (dir n fs'' :: nil)) as p.
+      assert (H := Heqp). unfold fs_level_split in H. simpl in H.
+      rewrite app_nil_r in H. rewrite Heqp in H. clear Heqp p.
+      rewrite (fs_inode_total_cons (dir n fs'' :: nil) H). simpl. auto.
+    + assert (0 <= fs_inode_total fs'). 1:apply fs_inode_total_ge_0.
+      pattern (fs_inode_total (x :: nil)) at 1. rewrite <- Nat.add_0_r.
+      revert H. apply Nat.add_le_mono_l.
+Qed.
+
+Definition fs_set_storage (s:Storage) (fs:FileSystem) :=
+  let f x := match x with
+             | file n _ => file n s
+             | dir _ _ => x
+             end
+  in fs_map_inode f fs.
