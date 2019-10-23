@@ -4,6 +4,7 @@ Require Import Lists.List.
 Require Import Arith.PeanoNat.
 Require Import Recdef.
 Require Import ArithRing.
+Require Import Program.Wf.
 
 Definition Name := nat.
 Inductive Storage := L | R.     (* Local / Remote *)
@@ -400,3 +401,73 @@ Definition fs_set_storage (s:Storage) (fs:FileSystem) :=
              | dir _ _ => x
              end
   in fs_map_inode f fs.
+
+Definition get_name (x:Inode) : Name :=
+  match x with
+  | file n _ => n
+  | dir n _ => n
+  end.
+
+Definition resolve_names (x1 x2:Inode) : (Name * Name)%type :=
+  match x1, x2 with
+  | dir n1 _,  dir n2 _  => (n1, n2)
+  | dir n1 _,  file n2 _ => (n1, n2)
+  | file n1 _, dir n2 _  => (n1, n2)
+  | file n1 _, file n2 _ => (n1, n2)
+  end.
+
+Program Fixpoint fs_merge (fs1 fs2:FileSystem)
+        {measure (fs_inode_total fs1 + fs_inode_total fs2)} : FileSystem :=
+  match fs1, fs2 with
+  | _, nil => fs1
+  | nil, _ => fs2
+  | x1::fs1', x2::fs2' =>
+    match Nat.compare (get_name x1) (get_name x2) with
+    | Lt => x1 :: fs_merge fs1' fs2
+    | Gt => x2 :: fs_merge fs1 fs2'
+    | Eq =>
+      let
+        (n1, n2) := resolve_names x1 x2 in
+      let
+        xs := match x1, x2 with
+              | dir _ fs1'', dir _ fs2'' => dir n1 (fs_merge fs1'' fs2'') :: nil
+              | dir _ fs1'', file _ s2   => dir n1 fs1'' :: file n2 s2 :: nil
+              | file _ s1,   dir _ fs2'' => file n1 s1 :: dir n2 fs2'' :: nil
+              | file _ s1,   file _ s2   => file n1 s1 :: file n2 s2 :: nil
+              end
+      in xs ++ fs_merge fs1' fs2'
+    end
+  end.
+Next Obligation.
+  apply Nat.add_lt_mono_r. apply fs_inode_total_cons_gt.
+Qed.
+Next Obligation.
+  apply Nat.add_lt_mono_l. apply fs_inode_total_cons_gt.
+Qed.
+Next Obligation.
+  rename wildcard'0 into n1'. rename wildcard' into n2'.
+  cut (fs_inode_total fs2'' < fs_inode_total (dir n1' fs2'' :: fs2')).
+  cut (fs_inode_total fs1'' < fs_inode_total (dir n2' fs1'' :: fs1')).
+  - apply Nat.add_lt_mono.
+  - assert (dir n2' fs1'' :: fs1' = (dir n2' fs1'' :: nil) ++ fs1').
+    1:auto. rewrite H. clear H. rewrite fs_inode_total_concat.
+    pattern (fs_inode_total fs1'') at 1. rewrite <- Nat.add_0_r.
+    apply Nat.add_lt_le_mono.
+    + remember (fs_level_split (dir n2' fs1'' :: nil)) as p. assert (H := Heqp).
+      unfold fs_level_split in H. simpl in H.
+      rewrite Heqp in H. clear Heqp p. rewrite app_nil_r in H.
+      rewrite (fs_inode_total_cons (dir n2' fs1'' :: nil) H). simpl. auto.
+    + apply fs_inode_total_ge_0.
+  - assert (dir n1' fs2'' :: fs2' = (dir n1' fs2'' :: nil) ++ fs2').
+    1:auto. rewrite H. clear H. rewrite fs_inode_total_concat.
+    pattern (fs_inode_total fs2'') at 1. rewrite <- Nat.add_0_r.
+    apply Nat.add_lt_le_mono.
+    + remember (fs_level_split (dir n1' fs2'' :: nil)) as p. assert (H := Heqp).
+      unfold fs_level_split in H. simpl in H.
+      rewrite Heqp in H. clear Heqp p. rewrite app_nil_r in H.
+      rewrite (fs_inode_total_cons (dir n1' fs2'' :: nil) H). simpl. auto.
+    + apply fs_inode_total_ge_0.
+Qed.
+Next Obligation.
+  apply Nat.add_lt_mono; apply fs_inode_total_cons_gt.
+Qed.
