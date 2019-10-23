@@ -449,37 +449,33 @@ Proof.
   rewrite H0. rewrite fs_inode_total_concat. rewrite IHfs. reflexivity.
 Qed.
 
-Function fs_sort (fs:FileSystem)
+Function fs_sort_other (fs:FileSystem)
          {measure fs_inode_total fs} : FileSystem :=
-  match fs_sort_level fs with
+  match fs with
   | nil => nil
-  | x::fs' => let x' := match x with
-                        | file _ _ => x
-                        | dir n fs' => dir n (fs_sort fs')
-                        end
-              in x' :: fs_sort fs'
+  | x::fs' =>
+    let x' := match x with
+              | file _ _ => x
+              | dir n fs' => dir n (fs_sort_other (fs_sort_level fs'))
+              end
+    in x' :: fs_sort_other fs'
   end.
 Proof.
-  - intros. apply (f_equal fs_inode_total) in teq.
-    rewrite fs_inode_total_sorted in teq. rewrite teq.
-    assert (file n s :: fs' = (file n s :: nil) ++ fs'). 1:reflexivity.
-    rewrite H. rewrite fs_inode_total_concat.
+  - intros. assert (file n s :: fs' = (file n s :: nil) ++ fs').
+    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
     pattern (fs_inode_total fs') at 1. rewrite <- Nat.add_0_l.
     apply Nat.add_lt_mono_r. assert (fs_inode_total nil = 0).
     + unfold fs_inode_total. apply fs_fold_level_nil.
     + rewrite <- H0. apply fs_inode_total_cons_gt.
-  - intros. apply (f_equal fs_inode_total) in teq.
-    rewrite fs_inode_total_sorted in teq. rewrite teq.
-    assert (dir n fs'0 :: fs' = (dir n fs'0 :: nil) ++ fs'). 1:reflexivity.
-    rewrite H. rewrite fs_inode_total_concat.
+  - intros. assert (dir n fs'0 :: fs' = (dir n fs'0 :: nil) ++ fs').
+    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
     pattern (fs_inode_total fs') at 1. rewrite <- Nat.add_0_l.
     apply Nat.add_lt_mono_r. assert (fs_inode_total nil = 0).
     + unfold fs_inode_total. apply fs_fold_level_nil.
     + rewrite <- H0. apply fs_inode_total_cons_gt.
-  - intros. apply (f_equal fs_inode_total) in teq.
-    rewrite fs_inode_total_sorted in teq. rewrite teq.
-    assert (dir n fs'0 :: fs' = (dir n fs'0 :: nil) ++ fs'). 1:reflexivity.
-    rewrite H. rewrite fs_inode_total_concat.
+  - intros. rewrite fs_inode_total_sorted.
+    assert (dir n fs'0 :: fs' = (dir n fs'0 :: nil) ++ fs').
+    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
     pattern (fs_inode_total fs'0) at 1. rewrite <- Nat.add_0_r.
     apply Nat.add_lt_le_mono.
     + remember (fs_level_split (dir n fs'0 :: nil)) as p. assert (H0 := Heqp).
@@ -488,6 +484,9 @@ Proof.
       rewrite (fs_inode_total_cons (dir n fs'0 :: nil) H0). auto.
     + apply fs_inode_total_ge_0.
 Qed.
+
+Definition fs_sort (fs:FileSystem) : FileSystem :=
+  fs_sort_other (fs_sort_level fs).
 
 Definition resolve_names (x1 x2:Inode) : (Name * Name)%type :=
   match x1, x2 with
