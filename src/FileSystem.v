@@ -496,6 +496,193 @@ Definition resolve_names (x1 x2:Inode) : (Name * Name)%type :=
   | file n1 _, file n2 _ => (n1, n2)
   end.
 
+Lemma fs_inode_total_compacted :
+  forall (n n1 n2:Name) (fs fs1 fs2:FileSystem) (c:nat),
+    fs_inode_total (dir n1 fs1 :: dir n2 fs2 :: fs) = c ->
+    fs_inode_total (dir n (fs1 ++ fs2) :: fs) < c.
+Proof.
+  intros. rewrite <- H.
+  assert (dir n (fs1 ++ fs2) :: fs = (dir n (fs1 ++ fs2) :: nil) ++ fs).
+  1:reflexivity. rewrite H0. rewrite fs_inode_total_concat.
+  assert (dir n1 fs1 :: dir n2 fs2 :: fs =
+          (dir n1 fs1 :: dir n2 fs2 :: nil) ++ fs).
+  1:reflexivity. rewrite H1. rewrite fs_inode_total_concat.
+  apply Nat.add_lt_mono_r.
+  remember (fs_level_split (dir n (fs1 ++ fs2) :: nil)) as p.
+  assert (H2 := Heqp). unfold fs_level_split in H2. simpl in H2.
+  rewrite app_nil_r in H2. rewrite Heqp in H2. clear Heqp p.
+  pose proof (fs_inode_total_cons).
+  rewrite (H3 (dir n (fs1 ++ fs2) :: nil) (dir n nil :: nil) (fs1 ++ fs2) H2).
+  assert (dir n1 fs1 :: dir n2 fs2 :: nil =
+          (dir n1 fs1 :: nil) ++ (dir n2 fs2 :: nil)).
+  1:reflexivity. rewrite H4. do 2 rewrite fs_inode_total_concat.
+  remember (fs_level_split (dir n1 fs1 :: nil)) as p.
+  assert (H5 := Heqp). unfold fs_level_split in H5. simpl in H5.
+  rewrite app_nil_r in H5. rewrite Heqp in H5. clear Heqp p.
+  rewrite (H3 (dir n1 fs1 :: nil) (dir n1 nil :: nil) fs1 H5).
+  remember (fs_level_split (dir n2 fs2 :: nil)) as p.
+  assert (H6 := Heqp). unfold fs_level_split in H6. simpl in H6.
+  rewrite app_nil_r in H6. rewrite Heqp in H6. clear Heqp p.
+  rewrite (H3 (dir n2 fs2 :: nil) (dir n2 nil :: nil) fs2 H6).
+  simpl. rewrite <- Nat.succ_lt_mono. apply Nat.add_lt_mono_l. auto.
+Qed.
+
+Lemma fs_inode_total_perm : forall (x1 x2:Inode) (fs:FileSystem),
+    fs_inode_total (x1 :: x2 :: fs) = fs_inode_total (x2 :: x1 :: fs).
+Proof.
+  intros. assert (x1 :: x2 :: fs = (x1 :: nil) ++ (x2 :: fs)).
+  1:reflexivity. assert (x2 :: x1 :: fs = (x2 :: nil) ++ (x1 :: fs)).
+  1:reflexivity. rewrite H. rewrite H0. do 2 rewrite fs_inode_total_concat.
+  assert (x1 :: fs = (x1 :: nil) ++ fs). 1:reflexivity.
+  assert (x2 :: fs = (x2 :: nil) ++ fs). 1:reflexivity.
+  rewrite H1. rewrite H2. do 2 rewrite fs_inode_total_concat. ring.
+Qed.
+
+Function fs_compat_level (fs:FileSystem)
+         {measure fs_inode_total fs} : FileSystem :=
+  match fs_sort_level fs with
+  | nil => nil
+  | x1::nil => x1::nil
+  | x1::x2::fs' =>
+    if get_name x1 <? get_name x2
+    then fs
+    else
+      let
+        (n1, n2) := resolve_names x1 x2
+      in match x1, x2 with
+         | dir _ fs1, dir _ fs2 => fs_compat_level (dir n1 (fs1 ++ fs2) :: fs')
+         | dir _ _,   file _ s2 => file n2 s2 :: fs_compat_level (x1 :: fs')
+         | file _ s1, dir _ _   => file n1 s1 :: fs_compat_level (x2 :: fs')
+         | file _ s1, file _ s2 => file n1 s1 :: file n2 s2 :: fs_compat_level fs'
+         end
+  end.
+Proof.
+  - intros. apply (f_equal fs_inode_total) in teq.
+    rewrite fs_inode_total_sorted in teq. rewrite teq.
+    assert (file n s1 :: file n0 s2 :: fs' =
+            (file n s1 :: file n0 s2 :: nil) ++ fs').
+    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+    pattern (fs_inode_total fs') at 1. rewrite <- Nat.add_0_l.
+    apply Nat.add_lt_mono_r. assert (fs_inode_total nil = 0).
+    + unfold fs_inode_total. apply fs_fold_level_nil.
+    + rewrite <- H0. rewrite <- fs_inode_total_cons_gt.
+      apply fs_inode_total_cons_gt.
+  - intros. apply (f_equal fs_inode_total) in teq.
+    rewrite fs_inode_total_sorted in teq. rewrite teq.
+    apply fs_inode_total_cons_gt.
+  - intros. apply (f_equal fs_inode_total) in teq.
+    rewrite fs_inode_total_sorted in teq. rewrite teq.
+    rewrite <- teq3. rewrite <- teq4.
+    rewrite fs_inode_total_perm. apply fs_inode_total_cons_gt.
+  - intros. apply (f_equal fs_inode_total) in teq.
+    rewrite fs_inode_total_sorted in teq. rewrite teq. symmetry in teq.
+    pose proof (fs_inode_total_compacted n1 n n0 fs' fs1 fs2 teq).
+    rewrite <- teq in H. assumption.
+Qed.
+
+Lemma fs_compat_level_dec : forall (fs:FileSystem),
+    fs_inode_total (fs_compat_level fs) <= fs_inode_total fs.
+Proof.
+  intro fs. functional induction (fs_compat_level fs).
+  - assert (fs_inode_total nil = 0).
+    + unfold fs_inode_total. apply fs_fold_level_nil.
+    + rewrite H. apply fs_inode_total_ge_0.
+  - apply (f_equal fs_inode_total) in e. rewrite fs_inode_total_sorted in e.
+    rewrite e. auto.
+  - apply (f_equal fs_inode_total) in e. rewrite fs_inode_total_sorted in e.
+    rewrite e. auto.
+  - rewrite IHf. apply (f_equal fs_inode_total) in e.
+    rewrite fs_inode_total_sorted in e. symmetry in e.
+    pose proof (fs_inode_total_compacted n1 _x _x0 fs' fs1 fs2 e).
+    apply Nat.lt_eq_cases. left. assumption.
+  - assert (file n2 s2 :: fs_compat_level (dir _x _x0 :: fs') =
+            (file n2 s2 :: nil) ++ fs_compat_level (dir _x _x0 :: fs')).
+    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+    apply (f_equal fs_inode_total) in e. rewrite fs_inode_total_sorted in e.
+    rewrite e. rewrite fs_inode_total_perm. remember (dir _x _x0 :: fs') as fs''.
+    assert (file _x1 s2 :: fs'' = (file _x1 s2 :: nil) ++ fs''). 1:reflexivity.
+    rewrite H0. rewrite fs_inode_total_concat. revert IHf. apply Nat.add_le_mono.
+    remember (fs_level_split (file n2 s2 :: nil)) as p.
+    assert (H1 := Heqp). unfold fs_level_split in H1. simpl in H1.
+    rewrite Heqp in H1. clear Heqp p.
+    rewrite (fs_inode_total_left (file n2 s2 :: nil) H1).
+    remember (fs_level_split (file _x1 s2 :: nil)) as p.
+    assert (H2 := Heqp). unfold fs_level_split in H2. simpl in H2.
+    rewrite Heqp in H2. clear Heqp p.
+    rewrite (fs_inode_total_left (file _x1 s2 :: nil) H2). auto.
+  - assert (file n1 s1 :: fs_compat_level (dir _x0 _x1 :: fs') =
+            (file n1 s1 :: nil) ++ fs_compat_level (dir _x0 _x1 :: fs')).
+    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+    apply (f_equal fs_inode_total) in e. rewrite fs_inode_total_sorted in e.
+    rewrite e. remember (dir _x0 _x1 :: fs') as fs''.
+    assert (file _x s1 :: fs'' = (file _x s1 :: nil) ++ fs''). 1:reflexivity.
+    rewrite H0. rewrite fs_inode_total_concat. revert IHf. apply Nat.add_le_mono.
+    remember (fs_level_split (file n1 s1 :: nil)) as p.
+    assert (H1 := Heqp). unfold fs_level_split in H1. simpl in H1.
+    rewrite Heqp in H1. clear Heqp p.
+    rewrite (fs_inode_total_left (file n1 s1 :: nil) H1).
+    remember (fs_level_split (file _x s1 :: nil)) as p.
+    assert (H2 := Heqp). unfold fs_level_split in H2. simpl in H2.
+    rewrite Heqp in H2. clear Heqp p.
+    rewrite (fs_inode_total_left (file _x s1 :: nil) H2). auto.
+  - assert (file n1 s1 :: file n2 s2 :: fs_compat_level fs' =
+            (file n1 s1 :: file n2 s2 :: nil) ++ fs_compat_level fs').
+    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+    apply (f_equal fs_inode_total) in e.
+    rewrite fs_inode_total_sorted in e. rewrite e.
+    assert (file _x s1 :: file _x0 s2 :: fs' =
+            (file _x s1 :: file _x0 s2 :: nil) ++ fs').
+    1:reflexivity. rewrite H0. rewrite fs_inode_total_concat.
+    revert IHf. apply Nat.add_le_mono.
+    remember (fs_level_split (file n1 s1 :: file n2 s2 :: nil)) as p.
+    assert (H1 := Heqp). unfold fs_level_split in H1. simpl in H1.
+    rewrite Heqp in H1. clear Heqp p.
+    rewrite (fs_inode_total_left (file n1 s1 :: file n2 s2 :: nil) H1).
+    remember (fs_level_split (file _x s1 :: file _x0 s2 :: nil)) as p.
+    assert (H2 := Heqp). unfold fs_level_split in H2. simpl in H2.
+    rewrite Heqp in H2. clear Heqp p.
+    rewrite (fs_inode_total_left (file _x s1 :: file _x0 s2 :: nil) H2). auto.
+Qed.
+
+Function fs_compat_other (fs:FileSystem)
+         {measure fs_inode_total fs} : FileSystem :=
+  match fs with
+  | nil => nil
+  | x::fs' =>
+    let x' := match x with
+              | file _ _ => x
+              | dir n fs' => dir n (fs_compat_other (fs_compat_level fs'))
+              end
+    in x' :: fs_compat_other fs'
+  end.
+Proof.
+  - intros. assert (file n s :: fs' = (file n s :: nil) ++ fs').
+    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+    pattern (fs_inode_total fs') at 1. rewrite <- Nat.add_0_l.
+    apply Nat.add_lt_mono_r. assert (fs_inode_total nil = 0).
+    + unfold fs_inode_total. apply fs_fold_level_nil.
+    + rewrite <- H0. apply fs_inode_total_cons_gt.
+  - intros. assert (dir n fs'0 :: fs' = (dir n fs'0 :: nil) ++ fs').
+    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+    pattern (fs_inode_total fs') at 1. rewrite <- Nat.add_0_l.
+    apply Nat.add_lt_mono_r. assert (fs_inode_total nil = 0).
+    + unfold fs_inode_total. apply fs_fold_level_nil.
+    + rewrite <- H0. apply fs_inode_total_cons_gt.
+  - intros. assert (dir n fs'0 :: fs' = (dir n fs'0 :: nil) ++ fs').
+    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+    pattern (fs_inode_total (fs_compat_level fs'0)) at 1.
+    rewrite <- Nat.add_0_r. apply Nat.add_lt_le_mono.
+    + remember (fs_level_split (dir n fs'0 :: nil)) as p. assert (H0 := Heqp).
+      unfold fs_level_split in H0. simpl in H0.
+      rewrite Heqp in H0. clear Heqp p. rewrite app_nil_r in H0.
+      rewrite (fs_inode_total_cons (dir n fs'0 :: nil) H0).
+      simpl. apply Nat.lt_succ_r. apply fs_compat_level_dec.
+    + apply fs_inode_total_ge_0.
+Qed.
+
+Definition fs_compat (fs:FileSystem) : FileSystem :=
+  fs_compat_other (fs_compat_level fs).
+
 Program Fixpoint fs_merge (fs1 fs2:FileSystem)
         {measure (fs_inode_total fs1 + fs_inode_total fs2)} : FileSystem :=
   match fs1, fs2 with
