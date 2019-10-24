@@ -7,12 +7,32 @@ Require Import ArithRing.
 Require Import Program.Wf.
 
 Definition Name := nat.
-Inductive Storage := L | R.     (* Local / Remote *)
+Definition Storage := nat.
 
 Inductive Inode : Set :=
 | file : Name -> Storage -> Inode
 | dir : Name -> list Inode -> Inode.
 Definition FileSystem : Set := list Inode.
+
+Definition inode_compare (x1 x2:Inode) : comparison :=
+  match x1, x2 with
+  | dir n1 _, dir n2 _ => Nat.compare n1 n2
+  | dir n1 _, file n2 _ => let cmp := Nat.compare n1 n2
+                           in match cmp with
+                              | Eq => Gt
+                              | _ => cmp
+                              end
+  | file n1 _, dir n2 _ => let cmp := Nat.compare n1 n2
+                           in match cmp with
+                              | Eq => Lt
+                              | _ => cmp
+                              end
+  | file n1 s1, file n2 s2 => let cmp := Nat.compare n1 n2
+                              in match cmp with
+                                 | Eq => Nat.compare s1 s2
+                                 | _ => cmp
+                                 end
+  end.
 
 Lemma max_pair_lt : forall (n1 n2 m1 m2:nat),
     n1 < n2 -> m1 < m2 -> Nat.max n1 m1 < Nat.max n2 m2.
@@ -402,25 +422,20 @@ Definition fs_set_storage (s:Storage) (fs:FileSystem) :=
              end
   in fs_map_inode f fs.
 
-Definition get_name (x:Inode) : Name :=
-  match x with
-  | file n _ => n
-  | dir n _ => n
-  end.
-
 Fixpoint fs_sort_insert (x:Inode) (fs:FileSystem) : FileSystem :=
   match fs with
   | nil => x :: nil
-  | x'::fs' => if get_name x <=? get_name x'
-               then x :: fs
-               else x' :: fs_sort_insert x fs'
+  | x'::fs' => match inode_compare x x' with
+               | Gt => x' :: fs_sort_insert x fs'
+               | _ => x :: fs
+               end
   end.
 
 Lemma fs_inode_total_insert : forall (x:Inode) (fs:FileSystem),
     fs_inode_total (fs_sort_insert x fs) = fs_inode_total (x :: fs).
 Proof.
   intros x fs. induction fs; unfold fs_sort_insert. 1:reflexivity.
-  fold fs_sort_insert. destruct (get_name x <=? get_name a). 1:reflexivity.
+  fold fs_sort_insert. destruct (inode_compare x a); try (reflexivity || fail).
   assert (a :: fs_sort_insert x fs = (a :: nil) ++ fs_sort_insert x fs).
   1:reflexivity. rewrite H. rewrite fs_inode_total_concat. rewrite IHfs.
   assert (x :: a :: fs = (x :: a :: nil) ++ fs).
@@ -428,8 +443,7 @@ Proof.
   assert (x :: fs = (x :: nil) ++ fs).
   1:reflexivity. rewrite H1. rewrite fs_inode_total_concat.
   assert (x :: a :: nil = (x :: nil) ++ (a :: nil)).
-  1:reflexivity. rewrite H2. rewrite fs_inode_total_concat.
-  ring.
+  1:reflexivity. rewrite H2. rewrite fs_inode_total_concat. ring.
 Qed.
 
 Fixpoint fs_sort_level (fs:FileSystem) : FileSystem :=
