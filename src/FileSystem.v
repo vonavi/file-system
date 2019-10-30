@@ -458,7 +458,7 @@ Proof.
 Qed.
 
 Lemma fs_inode_total_concat : forall (fs fs':FileSystem),
-     fs_inode_total (fs ++ fs') = fs_inode_total fs + fs_inode_total fs'.
+    fs_inode_total (fs ++ fs') = fs_inode_total fs + fs_inode_total fs'.
 Proof.
   intro fs. unfold fs_inode_total.
   functional induction (fs_fold_level (fun _ => S) O fs); intro fs'.
@@ -962,6 +962,15 @@ Fixpoint fs_find (xs:list Inode) (fs:FileSystem) : Prop :=
               end
   end.
 
+Fixpoint fs_inode_lookup_group (x:Inode) (gs:list FileSystem) : option Inode :=
+  match gs with
+  | nil => None
+  | g::gs' => match fs_inode_lookup x g with
+              | Some y => Some y
+              | None => fs_inode_lookup_group x gs'
+              end
+  end.
+
 Lemma fs_lookup_eq : forall (x y:Inode) (fs:FileSystem),
     fs_inode_lookup x fs = Some y -> inode_eqb x y = true.
 Proof.
@@ -1071,4 +1080,21 @@ Proof.
     + simpl. rewrite H. eauto.
     + specialize (IHf0 H0). simpl. assumption.
     + specialize (IHf0 H0). simpl. rewrite H. assumption.
+Qed.
+
+Lemma fs_lookup_grouped_level : forall (x y:Inode) (fs:FileSystem),
+    fs_inode_lookup x fs = Some y -> exists (z:Inode),
+      fs_inode_lookup_group x (fs_group_level fs) = Some z.
+Proof.
+  intros x y fs. revert x y. induction fs; intros. 1:discriminate H.
+  simpl in H. case_eq (inode_eqb x a); intro H0; rewrite H0 in H.
+  - inversion H. rewrite H2 in H0. simpl. destruct (fs_group_level fs).
+    + simpl. rewrite H0. eauto.
+    + destruct (hd_error f); try (destruct (inode_eqb y i));
+        simpl; rewrite H0; eauto.
+  - specialize (IHfs x y H). destruct IHfs as [z IHfs].
+    simpl. destruct (fs_group_level fs).
+    + unfold fs_inode_lookup_group in IHfs. discriminate.
+    + destruct (hd_error f); try (destruct (inode_eqb a i)); simpl; rewrite H0;
+        simpl in IHfs; rewrite IHfs; eauto.
 Qed.
