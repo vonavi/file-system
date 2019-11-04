@@ -55,6 +55,27 @@ Proof.
   - rewrite Nat.eqb_eq. reflexivity.
 Qed.
 
+Lemma inode_eqb_symm : forall (x y:Inode),
+    inode_eqb x y = true <-> inode_eqb y x = true.
+Proof.
+  intros. unfold inode_eqb. destruct x; destruct y.
+  - do 2 rewrite Bool.andb_true_iff.
+    split; intro H; inversion H; apply Nat.eqb_eq in H0; apply Nat.eqb_eq in H1;
+      rewrite H0; rewrite H1; split; apply Nat.eqb_eq; reflexivity.
+  - split; intro H; inversion H.
+  - split; intro H; inversion H.
+  - split; intro H; inversion H; apply Nat.eqb_eq in H; rewrite H; reflexivity.
+Qed.
+
+Lemma inode_eqb_trans : forall (x y z:Inode),
+    inode_eqb x y = true -> inode_eqb x z = inode_eqb y z.
+Proof.
+  intros. destruct x; destruct y; simpl in H; inversion H; clear H1.
+  - apply Bool.andb_true_iff in H. do 2 rewrite Nat.eqb_eq in H.
+    destruct H. rewrite H. rewrite H0. reflexivity.
+  - apply Nat.eqb_eq in H. rewrite H. destruct z; simpl; reflexivity.
+Qed.
+
 Lemma inode_eqb_compare : forall (x y:Inode),
     inode_eqb x y = true <-> inode_compare x y = Eq.
 Proof.
@@ -841,18 +862,97 @@ Function fs_compact_group (fs:FileSystem)
   | nil => None
   | x1::nil => Some x1
   | x1::x2::fs' =>
-    let
-      (n1, n2) := resolve_names x1 x2
-    in match x1, x2 with
-       | dir _ fs1, dir _ fs2 => fs_compact_group (dir n1 (fs1 ++ fs2) :: fs')
-       | file _ _, file _ _ => fs_compact_group (x1 :: fs')
-       | _, _ => None
-       end
+    if inode_eqb x1 x2
+    then let
+        (n1, n2) := resolve_names x1 x2
+      in match x1, x2 with
+         | dir _ fs1, dir _ fs2 => fs_compact_group (dir n1 (fs1 ++ fs2) :: fs')
+         | file _ _, file _ _ => fs_compact_group (x1 :: fs')
+         | _, _ => None
+         end
+    else None
   end.
 Proof.
   - intros. rewrite fs_inode_total_perm. apply fs_inode_total_cons_gt.
   - intros. apply (f_equal fs_inode_total) in teq. symmetry in teq.
     apply (fs_inode_total_compacted n1 n n0 fs' fs1 fs2).
+Qed.
+
+Lemma fs_compacted_group_eq : forall (x y:Inode) (fs:FileSystem),
+    fs_compact_group (x :: fs) = Some y -> inode_eqb x y = true.
+Proof.
+  intros x y fs. remember (x :: fs) as fs'. revert x fs Heqfs'.
+  functional induction fs_compact_group fs'; intros; inversion H.
+  - inversion Heqfs'. rewrite <- H1. rewrite <- H2. apply inode_eqb_eq.
+  - specialize (IHo (dir n1 (fs1 ++ fs2)) fs').
+    assert (dir n1 (fs1 ++ fs2) :: fs' = dir n1 (fs1 ++ fs2) :: fs').
+    1:reflexivity. specialize (IHo H0 H). inversion Heqfs'. simpl in e1.
+    inversion e1. simpl in IHo. destruct y; inversion IHo. simpl. reflexivity.
+  - specialize (IHo (file _x _x0) fs').
+    assert (file _x _x0 :: fs' = file _x _x0 :: fs'). 1:reflexivity.
+    specialize (IHo H0 H). inversion Heqfs'. assumption.
+Qed.
+
+Lemma fs_compacted_group_dir_cons : forall (n:Name) (fs fs1 fs2:FileSystem),
+    fs_compact_group (dir n fs1 :: dir n fs2 :: fs) =
+    fs_compact_group (dir n (fs1 ++ fs2) :: fs).
+Proof.
+  intros. remember (dir n fs1 :: dir n fs2 :: fs) as fs'.
+  functional induction fs_compact_group fs'; inversion Heqfs'.
+  - repeat f_equal. simpl in e1. inversion e1. rewrite <- H5. assumption.
+  - rewrite H0 in y. rewrite H1 in y. inversion y.
+  - rewrite H0 in e0. rewrite H1 in e0. simpl in e0. assert (n = n).
+    1:reflexivity. apply Nat.eqb_eq in H. rewrite H in e0. discriminate e0.
+Qed.
+
+Lemma fs_compacted_group_file_cons : forall (n:Name) (s:Storage) (fs:FileSystem),
+    fs_compact_group (file n s :: file n s :: fs) =
+    fs_compact_group (file n s :: fs).
+Proof.
+  intros. remember (file n s :: file n s :: fs) as fs'.
+  functional induction fs_compact_group fs'; inversion Heqfs'.
+  - reflexivity.
+  - rewrite H0 in y. rewrite H1 in y. inversion y.
+  - rewrite H0 in e0. rewrite H1 in e0. simpl in e0.
+    apply Bool.andb_false_iff in e0. destruct e0.
+    + assert (n = n). 1:reflexivity. apply Nat.eqb_eq in H3. rewrite H3 in H.
+      discriminate H.
+    + assert (s = s). 1:reflexivity. apply Nat.eqb_eq in H3. rewrite H3 in H.
+      discriminate H.
+Qed.
+
+Lemma fs_compacted_group_cons : forall (x y:Inode) (fs:FileSystem),
+    fs_compact_group fs = Some y -> inode_eqb x y = true ->
+    exists (z:Inode), fs_compact_group (x :: fs) = Some z.
+Proof.
+  intros. destruct x; destruct y; simpl in H0; inversion H0.
+  - apply Bool.andb_true_iff in H0. do 2 rewrite Nat.eqb_eq in H0.
+    inversion H0. rewrite <- H1 in H. rewrite <- H3 in H. clear H0 H1 H2 H3 n0 s0.
+    functional induction fs_compact_group fs; inversion H.
+    + inversion H. rewrite fs_compacted_group_file_cons.
+      remember (file n s :: nil) as fs.
+      functional induction fs_compact_group fs; inversion Heqfs. eauto.
+    + pose proof (fs_compacted_group_eq (dir n1 (fs1 ++ fs2)) fs' H).
+      simpl in H0. discriminate H0.
+    + specialize (IHo H). simpl in e0. apply Bool.andb_true_iff in e0.
+      do 2 rewrite Nat.eqb_eq in e0. inversion e0. rewrite <- H0. rewrite <- H2.
+      pose proof (fs_compacted_group_eq (file _x _x0) fs' H). simpl in H3.
+      apply Bool.andb_true_iff in H3. do 2 rewrite Nat.eqb_eq in H3.
+      inversion H3. rewrite H4. rewrite H5. rewrite H4 in IHo. rewrite H5 in IHo.
+      rewrite fs_compacted_group_file_cons. assumption.
+  - apply Nat.eqb_eq in H0. rewrite <- H0 in H.
+    functional induction fs_compact_group fs; inversion H.
+    + inversion H. rewrite (fs_compacted_group_dir_cons n nil l l0).
+      remember (dir n (l ++ l0) :: nil) as fs.
+      functional induction fs_compact_group fs; inversion Heqfs. eauto.
+    + specialize (IHo H). simpl in e0. apply Nat.eqb_eq in e0.
+      rewrite <- e0. simpl in e1. inversion e1.
+      pose proof (fs_compacted_group_eq (dir n1 (fs1 ++ fs2)) fs' H).
+      simpl in H1. apply Nat.eqb_eq in H1. rewrite H1. rewrite H1 in IHo.
+      do 2 rewrite fs_compacted_group_dir_cons. rewrite <- List.app_assoc.
+      rewrite fs_compacted_group_dir_cons in IHo. assumption.
+    + pose proof (fs_compacted_group_eq (file _x _x0) fs' H). simpl in H1.
+      discriminate H1.
 Qed.
 
 Fixpoint fs_compact_groups (gs:list FileSystem) : FileSystem :=
@@ -888,6 +988,9 @@ Proof.
       pattern (fold_right Nat.add 0 (map fs_inode_total gs)) at 1.
       rewrite <- Nat.add_0_l.
       apply Nat.add_le_mono; [apply fs_inode_total_ge_0 | auto].
+    + simpl. pattern (fs_inode_total (fs_compact_groups gs)) at 1.
+      rewrite <- Nat.add_0_l. apply Nat.add_le_mono;
+                                [apply fs_inode_total_ge_0 | assumption].
 Qed.
 
 Definition fs_compact_level (fs:FileSystem) : FileSystem :=
