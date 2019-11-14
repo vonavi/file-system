@@ -70,26 +70,26 @@ Definition compare_node (x1 x2:Node) : comparison :=
 Lemma compare_node_sym :
   forall (x y:Node), compare_node y x = CompOpp (compare_node x y).
 Proof.
-  intros. case_eq (compare_node x y); destruct x; destruct y; simpl;
-            case_eq (n ?= n0); intros; rewrite Nat.compare_antisym; rewrite H;
-              simpl; reflexivity || inversion H0; rewrite Nat.compare_antisym;
-                rewrite H0; reflexivity.
+  intros. destruct x, y; simpl; case_eq (n ?= n0); intro;
+            rewrite Nat.compare_antisym; rewrite H; simpl;
+              reflexivity || apply Nat.compare_antisym.
 Qed.
 
 Lemma compare_node_Eq :
   forall (x y:Node), compare_node x y = Eq <-> eq_node x y.
 Proof.
-  split; intros; destruct x, y; simpl in *.
-  - case_eq (n ?= n0); intro H0; rewrite H0 in H; inversion H.
-    rewrite Nat.compare_eq_iff in H, H0. rewrite H, H0. split; reflexivity.
-  - case_eq (n ?= n0); intro H0; rewrite H0 in H; inversion H.
-  - case_eq (n ?= n0); intro H0; rewrite H0 in H; inversion H.
-  - rewrite Nat.compare_eq_iff in H. assumption.
-  - destruct H. rewrite <- Nat.compare_eq_iff in H, H0.
-    rewrite H, H0. reflexivity.
-  - inversion H.
-  - inversion H.
-  - apply Nat.compare_eq_iff. assumption.
+  destruct x, y; simpl; case_eq (n ?= n0); intro.
+  all: match goal with
+       | |- _ <-> False =>
+         split; intro; inversion H0
+       | H : _ = Eq |- _ =>
+         rewrite Nat.compare_eq_iff in H
+       | _ =>
+         split; intro; inversion H0; rewrite <- Nat.compare_eq_iff in H1;
+           rewrite H1 in H; inversion H
+       end.
+  - rewrite Nat.compare_eq_iff. split; intro; [split | inversion H0]; assumption.
+  - split; intro; [assumption | reflexivity].
 Qed.
 
 Lemma compare_node_Eq_trans : forall (x y z:Node),
@@ -99,81 +99,41 @@ Proof.
   apply compare_node_Eq in H0. transitivity y; assumption.
 Qed.
 
+Ltac destruct_compare_node :=
+  let Hc := fresh
+  in match goal with
+     | H : context [match (?n ?= ?n0) with _ => _ end] |- _ =>
+       case_eq (n ?= n0); intro Hc; rewrite Hc in H; inversion H; clear H
+     end.
+
+Ltac contradict_compare_node :=
+  let Hn := fresh
+  in simpl in *; repeat destruct_compare_node;
+     repeat match goal with
+            | H : (_ ?= _) = Eq |- _ =>
+              rewrite Nat.compare_eq_iff in H; try rewrite H in *; clear H
+            | H : (_ ?= _) = Lt |- _ =>
+              try rewrite H in *; rewrite Nat.compare_lt_iff in H
+            | H : (_ ?= _) = Gt |- _ =>
+              try rewrite H in *; rewrite Nat.compare_gt_iff in H
+            end;
+     try discriminate;
+     match goal with
+     | H : ?n < ?n0, H0: ?n0 < ?n1 |- _ =>
+       assert (Hn: n < n1); [ revert H H0; apply Nat.lt_trans |]
+     | _ => idtac
+     end;
+     match goal with
+     | H : ?n < ?n |- _ => contradiction (Nat.lt_irrefl n)
+     | H : ?n < ?n0, H0 : ?n0 < ?n |- _ => contradiction (Nat.lt_asymm n n0)
+     | _ => idtac
+     end.
+
 Lemma compare_node_Lt_trans : forall (x y z:Node),
     compare_node x y = Lt -> compare_node y z = Lt -> compare_node x z = Lt.
 Proof.
-  intros. destruct x, z; simpl; case_eq (n ?= n0); intro; try reflexivity.
-  - case_eq (s ?= s0); intro.
-    + rewrite Nat.compare_eq_iff in H1, H2. rewrite <- H1, <- H2 in H0.
-      rewrite compare_node_sym in H. rewrite H0 in H. discriminate H.
-    + reflexivity.
-    + apply Nat.compare_eq_iff in H1. rewrite <- H1 in H0.
-      destruct y; simpl in H, H0; case_eq (n ?= n1); intro; rewrite H3 in H;
-        apply (f_equal CompOpp) in H3; rewrite <- Nat.compare_antisym in H3;
-          rewrite H3 in H0; simpl in H0; inversion H; inversion H0.
-      rewrite Nat.compare_lt_iff in H, H0. pose proof (Nat.lt_trans s s1 s0 H H0).
-      apply Nat.lt_asymm in H4. apply Nat.compare_ngt_iff in H4.
-      contradiction.
-  - destruct y; simpl in H, H0; case_eq (n ?= n1); case_eq (n1 ?= n0); intros;
-      rewrite H3 in H; rewrite H2 in H0; inversion H; inversion H0.
-    + rewrite Nat.compare_eq_iff in H2, H3. rewrite <- H2, H3 in H1.
-      rewrite Nat.compare_refl in H1. inversion H1.
-    + apply Nat.compare_eq_iff in H3. rewrite <- H3 in H2. rewrite H2 in H1.
-      inversion H1.
-    + apply Nat.compare_eq_iff in H2. rewrite H2 in H3. rewrite H3 in H1.
-      inversion H1.
-    + rewrite Nat.compare_lt_iff in H2, H3.
-      pose proof (Nat.lt_trans n n1 n0 H3 H2). apply Nat.lt_asymm in H4.
-      apply Nat.compare_ngt_iff in H4. contradiction.
-    + apply Nat.compare_eq_iff in H3. rewrite <- H3 in H2. rewrite H2 in H1.
-      inversion H1.
-    + rewrite Nat.compare_lt_iff in H2, H3.
-      pose proof (Nat.lt_trans n n1 n0 H3 H2). apply Nat.lt_asymm in H4.
-      apply Nat.compare_ngt_iff in H4. contradiction.
-  - destruct y; simpl in H, H0; case_eq (n ?= n1); case_eq (n1 ?= n0); intros;
-      rewrite H3 in H; rewrite H2 in H0; inversion H; inversion H0.
-    + rewrite Nat.compare_eq_iff in H2, H3. rewrite <- H2, H3 in H1.
-      rewrite Nat.compare_refl in H1. inversion H1.
-    + apply Nat.compare_eq_iff in H3. rewrite <- H3 in H2. rewrite H2 in H1.
-      inversion H1.
-    + apply Nat.compare_eq_iff in H2. rewrite H2 in H3. rewrite H3 in H1.
-      inversion H1.
-    + rewrite Nat.compare_lt_iff in H2, H3.
-      pose proof (Nat.lt_trans n n1 n0 H3 H2). apply Nat.lt_asymm in H4.
-      apply Nat.compare_ngt_iff in H4. contradiction.
-    + apply Nat.compare_eq_iff in H3. rewrite <- H3 in H2. rewrite H2 in H1.
-      inversion H1.
-    + rewrite Nat.compare_lt_iff in H2, H3.
-      pose proof (Nat.lt_trans n n1 n0 H3 H2). apply Nat.lt_asymm in H4.
-      apply Nat.compare_ngt_iff in H4. contradiction.
-  - apply Nat.compare_eq_iff in H1. rewrite <- H1 in H0.
-    destruct y; simpl in H, H0; case_eq (n ?= n1); intro; rewrite H2 in H;
-      apply (f_equal CompOpp) in H2; rewrite <- Nat.compare_antisym in H2;
-        rewrite H2 in H0; simpl in H0; inversion H; inversion H0.
-  - destruct y; simpl in H, H0; case_eq (n ?= n1); case_eq (n1 ?= n0); intros;
-      rewrite H3 in H; rewrite H2 in H0; inversion H; inversion H0.
-    + rewrite Nat.compare_eq_iff in H2. rewrite H2 in H3. rewrite H3 in H1.
-      inversion H1.
-    + rewrite Nat.compare_lt_iff in H2, H3.
-      pose proof (Nat.lt_trans n n1 n0 H3 H2). apply Nat.lt_asymm in H4.
-      apply Nat.compare_ngt_iff in H4. contradiction.
-    + rewrite Nat.compare_lt_iff in H2, H3.
-      pose proof (Nat.lt_trans n n1 n0 H3 H2). apply Nat.lt_asymm in H4.
-      apply Nat.compare_ngt_iff in H4. contradiction.
-  - apply Nat.compare_eq_iff in H1. rewrite <- H1 in H0.
-    destruct y; simpl in H, H0; case_eq (n ?= n1); intro; rewrite H2 in H;
-      apply (f_equal CompOpp) in H2; rewrite <- Nat.compare_antisym in H2;
-        rewrite H2 in H0; simpl in H0; inversion H; inversion H0.
-  - destruct y; simpl in H, H0; case_eq (n ?= n1); case_eq (n1 ?= n0); intros;
-      rewrite H3 in H; rewrite H2 in H0; inversion H; inversion H0.
-    + rewrite Nat.compare_eq_iff in H2. rewrite H2 in H3. rewrite H3 in H1.
-      inversion H1.
-    + rewrite Nat.compare_lt_iff in H2, H3.
-      pose proof (Nat.lt_trans n n1 n0 H3 H2). apply Nat.lt_asymm in H4.
-      apply Nat.compare_ngt_iff in H4. contradiction.
-    + rewrite Nat.compare_lt_iff in H2, H3.
-      pose proof (Nat.lt_trans n n1 n0 H3 H2). apply Nat.lt_asymm in H4.
-      apply Nat.compare_ngt_iff in H4. contradiction.
+  intros. destruct x, y, z; simpl; case_eq (n ?= n1); intro; try reflexivity;
+            contradict_compare_node. rewrite Nat.compare_lt_iff. assumption.
 Qed.
 
 Lemma compare_node_Gt_trans : forall (x y z:Node),
