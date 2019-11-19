@@ -5,176 +5,14 @@ Require Import Arith.PeanoNat.
 Require Import Recdef.
 Require Import ArithRing.
 Require Import Program.Wf.
+Require Import OrderedType OrderedTypeEx.
 
-Definition Name := nat.
-Definition Storage := nat.
+Add LoadPath ".".
+Require Import Node.
 
-Inductive Inode : Set :=
-| file : Name -> Storage -> Inode
-| dir : Name -> list Inode -> Inode.
-Definition FileSystem : Set := list Inode.
-
-Definition inode_eqb (x1 x2:Inode) : bool :=
-  match x1, x2 with
-  | dir n1 _, dir n2 _ => n1 =? n2
-  | file n1 s1, file n2 s2 => (n1 =? n2) && (s1 =? s2)
-  | _, _ => false
-  end.
-
-Definition inode_compare (x1 x2:Inode) : comparison :=
-  match x1, x2 with
-  | dir n1 _, dir n2 _ => Nat.compare n1 n2
-  | dir n1 _, file n2 _ => let cmp := Nat.compare n1 n2
-                           in match cmp with
-                              | Eq => Gt
-                              | _ => cmp
-                              end
-  | file n1 _, dir n2 _ => let cmp := Nat.compare n1 n2
-                           in match cmp with
-                              | Eq => Lt
-                              | _ => cmp
-                              end
-  | file n1 s1, file n2 s2 => let cmp := Nat.compare n1 n2
-                              in match cmp with
-                                 | Eq => Nat.compare s1 s2
-                                 | _ => cmp
-                                 end
-  end.
-
-Lemma inode_eqb_eq : forall (x:Inode), inode_eqb x x = true.
-Proof.
-  intro x. unfold inode_eqb. destruct x.
-  - case_eq (n =? n); case_eq (s =? s); intros; simpl.
-    + reflexivity.
-    + assert (s = s). 1:reflexivity. rewrite <- Nat.eqb_eq in H1.
-      rewrite H1 in H. discriminate.
-    + assert (n = n). 1:reflexivity. rewrite <- Nat.eqb_eq in H1.
-      rewrite H1 in H0. discriminate.
-    + assert (n = n). 1:reflexivity. rewrite <- Nat.eqb_eq in H1.
-      rewrite H1 in H0. discriminate.
-  - rewrite Nat.eqb_eq. reflexivity.
-Qed.
-
-Lemma inode_eqb_symm : forall (x y:Inode),
-    inode_eqb x y = true <-> inode_eqb y x = true.
-Proof.
-  intros. unfold inode_eqb. destruct x; destruct y.
-  - do 2 rewrite Bool.andb_true_iff.
-    split; intro H; inversion H; apply Nat.eqb_eq in H0; apply Nat.eqb_eq in H1;
-      rewrite H0; rewrite H1; split; apply Nat.eqb_eq; reflexivity.
-  - split; intro H; inversion H.
-  - split; intro H; inversion H.
-  - split; intro H; inversion H; apply Nat.eqb_eq in H; rewrite H; reflexivity.
-Qed.
-
-Lemma inode_eqb_trans : forall (x y z:Inode),
-    inode_eqb x y = true -> inode_eqb x z = inode_eqb y z.
-Proof.
-  intros. destruct x; destruct y; simpl in H; inversion H; clear H1.
-  - apply Bool.andb_true_iff in H. do 2 rewrite Nat.eqb_eq in H.
-    destruct H. rewrite H. rewrite H0. reflexivity.
-  - apply Nat.eqb_eq in H. rewrite H. destruct z; simpl; reflexivity.
-Qed.
-
-Lemma inode_eqb_compare : forall (x y:Inode),
-    inode_eqb x y = true <-> inode_compare x y = Eq.
-Proof.
-  intros. split; destruct x; destruct y; simpl;
-            case_eq (n ?= n0); intros; inversion H0;
-              try (rewrite Nat.eqb_compare in H0; rewrite H in H0; simpl in H0);
-              try (inversion H0).
-  - apply Nat.eqb_eq in H0. apply <- Nat.compare_eq_iff in H0. assumption.
-  - reflexivity.
-  - apply Nat.compare_eq_iff in H. apply <- Nat.eqb_eq in H.
-    apply Nat.compare_eq_iff in H0. apply <- Nat.eqb_eq in H0.
-    rewrite H. rewrite H0. reflexivity.
-  - apply Nat.compare_eq_iff in H. apply <- Nat.eqb_eq in H. assumption.
-Qed.
-
-Lemma inode_compare_antisym : forall (x x':Inode),
-    inode_compare x' x = CompOpp (inode_compare x x').
-Proof.
-  intros x x'. case_eq (inode_compare x x');
-                 destruct x; destruct x'; simpl;
-                   case_eq (n ?= n0); intros; try (discriminate || fail);
-                     rewrite Nat.compare_antisym; rewrite H; auto;
-                       rewrite Nat.compare_antisym; rewrite H0; auto.
-Qed.
-
-Lemma inode_compare_eq : forall (x y z:Inode),
-    inode_compare x y = Eq -> inode_compare x z = inode_compare y z.
-Proof.
-  intros. destruct x; destruct y; simpl in H; case_eq (n ?= n0); intro H0;
-            rewrite H0 in H; try (discriminate || fail);
-              rewrite Nat.compare_eq_iff in H0; rewrite H0.
-  - rewrite Nat.compare_eq_iff in H. rewrite H. reflexivity.
-  - destruct z; simpl; reflexivity.
-Qed.
-
-Lemma inode_compare_lt_trans : forall (x y z:Inode),
-    inode_compare x y = Lt -> inode_compare y z = Lt -> inode_compare x z = Lt.
-Proof.
-  intros x y z H.
-  case_eq x; case_eq y; case_eq z; intros;
-    rewrite H1 in H; rewrite H2 in H; simpl; simpl in H; simpl in H3;
-      case_eq (n0 ?= n); intro H4; rewrite H4 in H3;
-        case_eq (n1 ?= n0); intro H5; rewrite H5 in H; try discriminate.
-  - rewrite Nat.compare_eq_iff in H4. rewrite Nat.compare_eq_iff in H5.
-    rewrite <- H5 in H4. rewrite <- Nat.compare_eq_iff in H4. rewrite H4.
-    rewrite Nat.compare_lt_iff in H. rewrite Nat.compare_lt_iff in H3.
-    rewrite Nat.compare_lt_iff. revert H H3. apply Nat.lt_trans.
-  - rewrite Nat.compare_eq_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    rewrite H4 in H5. rewrite <- Nat.compare_lt_iff in H5. rewrite H5.
-    reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_eq_iff in H5.
-    rewrite <- H5 in H4. rewrite <- Nat.compare_lt_iff in H4. rewrite H4.
-    reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    pose proof (Nat.lt_trans n1 n0 n H5 H4). rewrite <- Nat.compare_lt_iff in H6.
-    rewrite H6. reflexivity.
-  - rewrite Nat.compare_eq_iff in H4. rewrite Nat.compare_eq_iff in H5.
-    rewrite H4 in H5. rewrite <- Nat.compare_eq_iff in H5. rewrite H5.
-    reflexivity.
-  - rewrite Nat.compare_eq_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    rewrite H4 in H5. rewrite <- Nat.compare_lt_iff in H5. rewrite H5.
-    reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_eq_iff in H5.
-    rewrite <- H5 in H4. rewrite <- Nat.compare_lt_iff in H4. rewrite H4.
-    reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    pose proof (Nat.lt_trans n1 n0 n H5 H4). rewrite <- Nat.compare_lt_iff in H6.
-    rewrite H6. reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_eq_iff in H5.
-    rewrite <- H5 in H4. rewrite <- Nat.compare_lt_iff in H4. rewrite H4.
-    reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    pose proof (Nat.lt_trans n1 n0 n H5 H4). rewrite <- Nat.compare_lt_iff in H6.
-    rewrite H6. reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_eq_iff in H5.
-    rewrite <- H5 in H4. rewrite <- Nat.compare_lt_iff in H4. rewrite H4.
-    reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    pose proof (Nat.lt_trans n1 n0 n H5 H4). rewrite <- Nat.compare_lt_iff in H6.
-    rewrite H6. reflexivity.
-  - rewrite Nat.compare_eq_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    rewrite H4 in H5. rewrite <- Nat.compare_lt_iff in H5. rewrite H5.
-    reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    pose proof (Nat.lt_trans n1 n0 n H5 H4). rewrite <- Nat.compare_lt_iff in H6.
-    rewrite H6. reflexivity.
-  - rewrite Nat.compare_eq_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    rewrite H4 in H5. rewrite <- Nat.compare_lt_iff in H5. rewrite H5.
-    reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    pose proof (Nat.lt_trans n1 n0 n H5 H4). rewrite <- Nat.compare_lt_iff in H6.
-    rewrite H6. reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    pose proof (Nat.lt_trans n1 n0 n H5 H4). rewrite <- Nat.compare_lt_iff in H6.
-    rewrite H6. reflexivity.
-  - rewrite Nat.compare_lt_iff in H4. rewrite Nat.compare_lt_iff in H5.
-    pose proof (Nat.lt_trans n1 n0 n H5 H4). rewrite <- Nat.compare_lt_iff in H6.
-    rewrite H6. reflexivity.
-Qed.
+Module Inode := Node_as_OT Nat_as_OT Nat_as_OT.
+Module IM := OrderedTypeFacts Inode.
+Definition FileSystem := list Inode.t.
 
 Lemma max_pair_lt : forall (n1 n2 m1 m2:nat),
     n1 < n2 -> m1 < m2 -> Nat.max n1 m1 < Nat.max n2 m2.
@@ -198,7 +36,7 @@ Proof.
   - revert Hfst Hsnd. apply injective_projections.
 Qed.
 
-Fixpoint inode_level (x:Inode) : nat :=
+Fixpoint inode_level (x:Inode.t) : nat :=
   match x with
   | file _ _ => S O
   | dir _ fs' => S (fold_right (fun x => Nat.max (inode_level x)) O fs')
@@ -207,18 +45,18 @@ Fixpoint inode_level (x:Inode) : nat :=
 Definition fs_level (fs:FileSystem) : nat :=
   fold_right (fun x => Nat.max (inode_level x)) O fs.
 
-Definition inode_level_split (x:Inode) : (Inode * FileSystem)%type :=
+Definition inode_level_split (x:Inode.t) : (Inode.t * FileSystem)%type :=
   match x with
   | file _ _ => (x, nil)
   | dir n fs => (dir n nil, fs)
   end.
 
-Lemma fs_inode_level : forall (x:Inode), inode_level x = fs_level (x::nil).
+Lemma fs_inode_level : forall (x:Inode.t), inode_level x = fs_level (x::nil).
 Proof.
   intro x. unfold fs_level. simpl. symmetry. apply Nat.max_0_r.
 Qed.
 
-Lemma inode_level_dec : forall (x x':Inode) (r:FileSystem),
+Lemma inode_level_dec : forall (x x':Inode.t) (r:FileSystem),
     inode_level_split x = (x', r) -> fs_level r < fs_level (x::nil).
 Proof.
   intros x x' r.
@@ -228,7 +66,7 @@ Qed.
 Definition fs_level_split (fs:FileSystem) :
   (FileSystem * FileSystem)%type :=
   let
-    inode_split (x:Inode) : (Inode * FileSystem)%type :=
+    inode_split (x:Inode.t) : (Inode.t * FileSystem)%type :=
     match x with
     | file _ _ => (x, nil)
     | dir n fs' => (dir n nil, fs')
@@ -237,7 +75,7 @@ Definition fs_level_split (fs:FileSystem) :
     inode_acc pair acc := (fst pair :: fst acc, snd pair ++ snd acc)
   in fold_right inode_acc (nil, nil) (map inode_split fs).
 
-Lemma fs_level_cons : forall (x:Inode) (fs:FileSystem),
+Lemma fs_level_cons : forall (x:Inode.t) (fs:FileSystem),
     fs_level (x :: fs) = Nat.max (inode_level x) (fs_level fs).
 Proof.
   intros x fs. unfold fs_level. unfold fold_right. reflexivity.
@@ -252,7 +90,7 @@ Proof.
     rewrite <- Nat.max_assoc. f_equal. apply IHfs.
 Qed.
 
-Lemma fs_level_split_cons : forall (x x':Inode) (fs l r r':FileSystem),
+Lemma fs_level_split_cons : forall (x x':Inode.t) (fs l r r':FileSystem),
     inode_level_split x = (x', r) -> fs_level_split fs = (l, r') ->
     fs_level_split (x :: fs) = (x' :: l, r ++ r').
 Proof.
@@ -295,7 +133,7 @@ Proof.
     rewrite app_comm_cons. rewrite app_assoc. split.
 Qed.
 
-Lemma fs_inode_split_dec : forall (x x':Inode) (fs l r r':FileSystem),
+Lemma fs_inode_split_dec : forall (x x':Inode.t) (fs l r r':FileSystem),
     inode_level_split x = (x', r) -> fs_level_split fs = (l, r') ->
     Nat.max (fs_level r) (fs_level r') < Nat.max (inode_level x) (fs_level fs).
 Proof.
@@ -320,7 +158,7 @@ Qed.
 Lemma fs_level_split_dec : forall (fs l r:FileSystem),
     fs <> nil -> fs_level_split fs = (l, r) -> fs_level r < fs_level fs.
 Proof.
-  intros fs l'' r'' H. pose proof destruct_list as H0. specialize (H0 Inode fs).
+  intros fs l'' r'' H. pose proof destruct_list as H0. specialize (H0 Inode.t fs).
   destruct H0. 2:contradiction. destruct s as [x H0]. destruct H0 as [fs' H0].
   remember (inode_level_split x) as pair1.
   assert (H1: exists x' r, pair1 = (x', r)). 1:apply pair_split.
@@ -334,7 +172,7 @@ Proof.
   rewrite fs_level_concat. apply (fs_inode_split_dec x fs' H1 H2).
 Qed.
 
-Function fs_fold_level (A:Type) (f:Inode->A->A) (a0:A) (fs:FileSystem)
+Function fs_fold_level (A:Type) (f:Inode.t->A->A) (a0:A) (fs:FileSystem)
          {measure fs_level fs} : A :=
   match fs with
   | nil => a0
@@ -357,7 +195,7 @@ Proof.
   - unfold not. intro Hnil. discriminate Hnil.
 Qed.
 
-Lemma fs_fold_level_nil : forall (A:Type) (f:Inode->A->A) (a0:A),
+Lemma fs_fold_level_nil : forall (A:Type) (f:Inode.t->A->A) (a0:A),
     fs_fold_level f a0 nil = a0.
 Proof.
   intros A f a0. remember nil as fs.
@@ -367,7 +205,7 @@ Proof.
 Qed.
 
 Lemma fs_fold_level_cons :
-  forall (A:Type) (f:Inode->A->A) (a0:A) (fs l r:FileSystem),
+  forall (A:Type) (f:Inode.t->A->A) (a0:A) (fs l r:FileSystem),
     fs_level_split fs = (l, r) ->
     fs_fold_level f a0 fs = fold_right f (fs_fold_level f a0 r) l.
 Proof.
@@ -379,7 +217,7 @@ Proof.
 Qed.
 
 Lemma fs_level_split_left :
-  forall (A:Type) (f:Inode->A->A) (a0:A) (fs l r:FileSystem),
+  forall (A:Type) (f:Inode.t->A->A) (a0:A) (fs l r:FileSystem),
     fs_level_split fs = (l, r) -> fs_level_split l = (l, nil).
 Proof.
   intros A f a0 fs. induction fs; intros l r H.
@@ -413,7 +251,7 @@ Proof.
 Qed.
 
 Lemma fs_fold_level_left :
-  forall (A:Type) (f:Inode->A->A) (a0:A) (fs l r:FileSystem),
+  forall (A:Type) (f:Inode.t->A->A) (a0:A) (fs l r:FileSystem),
     fs_level_split fs = (l, r) -> fs_fold_level f a0 l = fold_right f a0 l.
 Proof.
   intros A f a0 fs.
@@ -514,24 +352,26 @@ Proof.
     + clear IHs. induction l. 1:auto. simpl. revert IHl. apply Nat.le_le_succ_r.
 Qed.
 
-Lemma fs_inode_total_cons_gt : forall (x:Inode) (fs:FileSystem),
+Lemma fs_inode_total_cons_gt : forall (x:Inode.t) (fs:FileSystem),
     fs_inode_total fs < fs_inode_total (x :: fs).
 Proof.
   intros. assert (x :: fs = (x :: nil) ++ fs). 1:auto. rewrite H.
   clear H. rewrite fs_inode_total_concat.
   pattern (fs_inode_total fs) at 1. rewrite <- Nat.add_0_l.
-  apply Nat.add_lt_mono_r. destruct x.
-  - remember (fs_level_split (file n s :: nil)) as p. assert (H := Heqp).
-    unfold fs_level_split in H. simpl in H. rewrite Heqp in H. clear Heqp p.
-    rewrite (fs_inode_total_cons (file n s :: nil) H).
-    unfold fs_inode_total.  rewrite fs_fold_level_nil. auto.
-  - remember (fs_level_split (dir n l :: nil)) as p. assert (H := Heqp).
-    unfold fs_level_split in H. simpl in H. rewrite Heqp in H. clear Heqp p.
-    rewrite app_nil_r in H. rewrite (fs_inode_total_cons (dir n l :: nil) H).
-    simpl. apply Nat.lt_succ_r. apply fs_inode_total_ge_0.
+  apply Nat.add_lt_mono_r. remember (x :: nil) as fs'. destruct x.
+  - remember (fs_level_split fs') as p. rewrite Heqfs' in Heqp.
+    assert (H := Heqp). unfold fs_level_split in H. simpl in H.
+    rewrite Heqp in H. clear Heqp p. rewrite <- Heqfs' in H.
+    rewrite (fs_inode_total_cons fs' H). unfold fs_inode_total.
+    rewrite fs_fold_level_nil. rewrite Heqfs'. auto.
+  - remember (fs_level_split fs') as p. rewrite Heqfs' in Heqp.
+    assert (H := Heqp). unfold fs_level_split in H. simpl in H.
+    rewrite Heqp in H. clear Heqp p. rewrite app_nil_r, <- Heqfs' in H.
+    rewrite (fs_inode_total_cons fs' H). simpl. apply Nat.lt_succ_r.
+    apply fs_inode_total_ge_0.
 Qed.
 
-Function fs_map_inode (f:Inode->Inode) (fs:FileSystem)
+Function fs_map_inode (f:Inode.t->Inode.t) (fs:FileSystem)
          {measure fs_inode_total fs} : FileSystem :=
   match fs with
   | nil => nil
@@ -545,9 +385,8 @@ Function fs_map_inode (f:Inode->Inode) (fs:FileSystem)
 Proof.
   - intros. clear f teq fs. rewrite <- teq0. apply fs_inode_total_cons_gt.
   - intros. clear f teq fs. rewrite <- teq0. apply fs_inode_total_cons_gt.
-  - intros. clear f teq fs.
-    assert (dir n fs'' :: fs' = (dir n fs'' :: nil) ++ fs'). 1:auto.
-    rewrite H. clear H. rewrite fs_inode_total_concat.
+  - intros. clear f. rewrite <- teq. assert (fs = (dir n fs'' :: nil) ++ fs').
+    1:auto. rewrite H. clear H. rewrite fs_inode_total_concat.
     pattern (fs_inode_total fs'') at 1. rewrite <- Nat.add_0_r.
     cut (0 <= fs_inode_total fs'). apply Nat.add_lt_le_mono.
     + remember (fs_level_split (dir n fs'' :: nil)) as p.
@@ -557,49 +396,55 @@ Proof.
     + apply fs_inode_total_ge_0.
 Qed.
 
-Definition fs_set_storage (s:Storage) (fs:FileSystem) :=
+Definition fs_set_storage (s:nat) (fs:FileSystem) :=
   let f x := match x with
              | file n _ => file n s
              | dir _ _ => x
              end
   in fs_map_inode f fs.
 
-Fixpoint fs_sort_insert (x:Inode) (fs:FileSystem) : FileSystem :=
+Fixpoint fs_sort_insert (x:Inode.t) (fs:FileSystem) : FileSystem :=
   match fs with
   | nil => x :: nil
-  | x'::fs' => match inode_compare x x' with
-               | Gt => x' :: fs_sort_insert x fs'
-               | _ => x :: fs
+  | x'::fs' => match Inode.compare x x' with
+               | LT _ => x :: fs
+               | EQ _ => x :: fs
+               | GT _ => x' :: fs_sort_insert x fs'
                end
   end.
 
-Lemma fs_sort_insert_comm : forall (x y:Inode) (fs:FileSystem),
-    inode_compare x y = Lt -> fs_sort_insert x (fs_sort_insert y fs) =
-                              fs_sort_insert y (fs_sort_insert x fs).
+Lemma fs_sort_insert_comm : forall (x y:Inode.t) (fs:FileSystem),
+    Inode.lt x y -> fs_sort_insert x (fs_sort_insert y fs) =
+                    fs_sort_insert y (fs_sort_insert x fs).
 Proof.
   intros x y fs. revert x y. induction fs; intros; simpl.
-  - rewrite H. apply (f_equal CompOpp) in H.
-    rewrite <- inode_compare_antisym in H. rewrite H. reflexivity.
-  - case_eq (inode_compare y a); intro H0.
-    + pose proof (inode_compare_eq y a x H0).
-      apply (f_equal CompOpp) in H1. do 2 rewrite <- inode_compare_antisym in H1.
-      rewrite H in H1. rewrite <- H1. simpl. rewrite H. rewrite H0.
-      apply (f_equal CompOpp) in H. rewrite <- inode_compare_antisym in H.
-      rewrite H. simpl. reflexivity.
-    + pose proof (inode_compare_lt_trans x y a H H0). rewrite H1. simpl.
-      rewrite H. rewrite H0. apply (f_equal CompOpp) in H.
-      rewrite <- inode_compare_antisym in H. rewrite H. simpl. reflexivity.
-    + specialize (IHfs x y H). apply (f_equal CompOpp) in H.
-      rewrite <- inode_compare_antisym in H.
-      case_eq (inode_compare x a); intro H2; simpl; rewrite H2; rewrite H0;
-        [ rewrite H | rewrite H | rewrite IHfs ]; reflexivity.
+  - assert (H0 := H). apply IM.elim_compare_lt in H. destruct H. rewrite H.
+    apply IM.elim_compare_gt in H0. destruct H0. rewrite H0. reflexivity.
+  - destruct (Inode.compare y a).
+    + pose proof (Inode.lt_trans x y a H l). apply IM.elim_compare_lt in H0.
+      destruct H0. rewrite H0. simpl. assert (H2 := H).
+      apply IM.elim_compare_lt in H. destruct H. rewrite H.
+      apply IM.elim_compare_gt in H2. destruct H2. rewrite H1.
+      apply IM.elim_compare_lt in l. destruct l. rewrite H2. reflexivity.
+    + pose proof (IM.lt_eq H e). apply IM.elim_compare_lt in H0. destruct H0.
+      rewrite H0. simpl. assert (H2 := H). apply IM.elim_compare_lt in H.
+      destruct H. rewrite H. apply IM.elim_compare_gt in H2. destruct H2.
+      rewrite H1. apply IM.elim_compare_eq in e. destruct e. rewrite H2.
+      reflexivity.
+    + destruct (Inode.compare x a); simpl; apply IM.elim_compare_gt in l;
+        destruct l; rewrite H0; apply IM.elim_compare_gt in H; destruct H;
+          try rewrite H.
+      * apply IM.elim_compare_lt in l0. destruct l0. rewrite H1. reflexivity.
+      * apply IM.elim_compare_eq in e. destruct e. rewrite H1. reflexivity.
+      * apply IM.elim_compare_gt in l0. destruct l0. rewrite H1.
+        specialize (IHfs x y x1). rewrite IHfs. reflexivity.
 Qed.
 
-Lemma fs_inode_total_insert : forall (x:Inode) (fs:FileSystem),
+Lemma fs_inode_total_insert : forall (x:Inode.t) (fs:FileSystem),
     fs_inode_total (fs_sort_insert x fs) = fs_inode_total (x :: fs).
 Proof.
   intros x fs. induction fs; unfold fs_sort_insert. 1:reflexivity.
-  fold fs_sort_insert. destruct (inode_compare x a); try (reflexivity || fail).
+  fold fs_sort_insert. destruct (Inode.compare x a); try reflexivity.
   assert (a :: fs_sort_insert x fs = (a :: nil) ++ fs_sort_insert x fs).
   1:reflexivity. rewrite H. rewrite fs_inode_total_concat. rewrite IHfs.
   assert (x :: a :: fs = (x :: a :: nil) ++ fs).
@@ -616,35 +461,34 @@ Fixpoint fs_sort_level (fs:FileSystem) : FileSystem :=
   | x::fs' => fs_sort_insert x (fs_sort_level fs')
   end.
 
-Lemma fs_sort_level_cons : forall (x:Inode) (fs:FileSystem),
-    exists (x':Inode) (fs':FileSystem), fs_sort_level (x :: fs) = x' :: fs'.
+Lemma fs_sort_level_cons : forall (x:Inode.t) (fs:FileSystem),
+    exists (x':Inode.t) (fs':FileSystem), fs_sort_level (x :: fs) = x' :: fs'.
 Proof.
   intros x fs. revert x. induction fs.
   - simpl. eauto.
   - specialize (IHfs a). destruct IHfs as [x' IHfs]. destruct IHfs as [fs' IHfs].
     unfold fs_sort_level. unfold fs_sort_level in IHfs. rewrite IHfs.
-    intro x. simpl. destruct (inode_compare x x'); eauto.
+    intro x. simpl. destruct (Inode.compare x x'); eauto.
 Qed.
 
-Lemma fs_sort_level_insert : forall (x:Inode) (fs:FileSystem),
+Lemma fs_sort_level_insert : forall (x:Inode.t) (fs:FileSystem),
     fs_sort_level (fs_sort_insert x fs) = fs_sort_level (x :: fs).
 Proof.
   intros x fs. revert x. induction fs. 1:reflexivity.
-  simpl. intro x. case_eq (inode_compare x a); intro H; try reflexivity.
-  simpl. simpl in IHfs. specialize (IHfs x). rewrite IHfs.
-  apply (f_equal CompOpp) in H. rewrite <- inode_compare_antisym in H.
-  apply (fs_sort_insert_comm a x (fs_sort_level fs) H).
+  simpl. intro x. destruct (Inode.compare x a); try reflexivity.
+  simpl in *. specialize (IHfs x). rewrite IHfs.
+  apply (fs_sort_insert_comm a x (fs_sort_level fs) l).
 Qed.
 
-Lemma fs_sort_level_dec : forall (x:Inode) (fs fs':FileSystem),
+Lemma fs_sort_level_dec : forall (x:Inode.t) (fs fs':FileSystem),
     x :: fs = fs_sort_level fs' ->
     exists (fs'':FileSystem), fs = fs_sort_level fs''.
 Proof.
   intros x fs fs'. revert x fs. induction fs'; intros. 1:discriminate.
   simpl in H. remember (fs_sort_level fs') as xs. destruct xs.
   - inversion H. eauto.
-  - simpl in H. destruct (inode_compare a i); inversion H; try eauto.
-    assert (i :: xs = i :: xs). 1:reflexivity. specialize (IHfs' i xs H0).
+  - simpl in H. destruct (Inode.compare a t); inversion H; try eauto.
+    assert (t :: xs = t :: xs). 1:reflexivity. specialize (IHfs' t xs H0).
     destruct IHfs' as [fs'' IHfs']. rewrite IHfs'.
     assert (fs_sort_insert a (fs_sort_level fs'') = fs_sort_level (a :: fs'')).
     + induction fs''; reflexivity.
@@ -658,31 +502,28 @@ Proof.
   remember (fs_sort_level fs) as fs'. clear Heqfs' fs.
   pattern fs' at 2. rewrite <- IHfs. clear IHfs.
   revert a. induction fs'; simpl. 1:reflexivity.
-  intro a0. case_eq (inode_compare a0 a); intro H; try (auto || fail).
-  simpl. specialize (IHfs' a). rewrite <- IHfs'. clear IHfs'.
-  revert a a0 H. induction fs'; intros; simpl.
-  - rewrite H. apply (f_equal CompOpp) in H.
-    rewrite <- inode_compare_antisym in H. rewrite H. reflexivity.
-  - case_eq (inode_compare a1 a); intro H0.
-    + pose proof (inode_compare_eq a1 a a0 H0).
-      rewrite H in H1. apply (f_equal CompOpp) in H1.
-      rewrite <- inode_compare_antisym in H1. rewrite <- H1. simpl.
-      apply (f_equal CompOpp) in H. rewrite <- inode_compare_antisym in H.
-      apply (fs_sort_insert_comm a0 a1 (fs_sort_insert a (fs_sort_level fs')) H).
-    + apply (f_equal CompOpp) in H. rewrite <- inode_compare_antisym in H.
-      pose proof (inode_compare_lt_trans a0 a1 a H H0). rewrite H1. simpl.
-      apply (fs_sort_insert_comm a0 a1 (fs_sort_insert a (fs_sort_level fs')) H).
-    + apply (f_equal CompOpp) in H. rewrite <- inode_compare_antisym in H.
-      case_eq (inode_compare a0 a); intro H1; simpl.
-      * specialize (IHfs' a a1 H0). rewrite IHfs'.
+  intro a0. destruct (Inode.compare a0 a); try auto. simpl.
+  specialize (IHfs' a). rewrite <- IHfs'. clear IHfs'.
+  revert a a0 l. induction fs'; intros; simpl.
+  - assert (l0 := l). apply IM.elim_compare_lt in l. destruct l. rewrite H.
+    apply IM.elim_compare_gt in l0. destruct l0. rewrite H0. reflexivity.
+  - destruct (Inode.compare a1 a).
+    + pose proof (Inode.lt_trans a0 a1 a l l0). apply IM.elim_compare_lt in H.
+      destruct H. rewrite H. simpl.
+      apply (fs_sort_insert_comm a0 a1 (fs_sort_insert a (fs_sort_level fs')) l).
+    + pose proof (IM.lt_eq l e). apply IM.elim_compare_lt in H. destruct H.
+      rewrite H. simpl.
+      apply (fs_sort_insert_comm a0 a1 (fs_sort_insert a (fs_sort_level fs')) l).
+    + destruct (Inode.compare a0 a); simpl.
+      * specialize (IHfs' a a1 l0). rewrite IHfs'.
         rewrite fs_sort_level_insert. simpl.
-        apply (fs_sort_insert_comm a0 a1 (fs_sort_insert a (fs_sort_level fs')) H).
-      * specialize (IHfs' a a1 H0). rewrite IHfs'.
+        apply (fs_sort_insert_comm a0 a1 (fs_sort_insert a (fs_sort_level fs')) l).
+      * specialize (IHfs' a a1 l0). rewrite IHfs'.
         rewrite fs_sort_level_insert. simpl.
-        apply (fs_sort_insert_comm a0 a1 (fs_sort_insert a (fs_sort_level fs')) H).
-      * assert (IHfs'0 := IHfs'). specialize (IHfs' a a1 H0). rewrite IHfs'.
-        specialize (IHfs'0 a a0 H1). rewrite IHfs'0.
-        apply (fs_sort_insert_comm a0 a1 (fs_sort_level (fs_sort_insert a fs')) H).
+        apply (fs_sort_insert_comm a0 a1 (fs_sort_insert a (fs_sort_level fs')) l).
+      * assert (IHfs'0 := IHfs'). specialize (IHfs' a a1 l0). rewrite IHfs'.
+        specialize (IHfs'0 a a0 l1). rewrite IHfs'0.
+        apply (fs_sort_insert_comm a0 a1 (fs_sort_level (fs_sort_insert a fs')) l).
 Qed.
 
 Lemma fs_inode_total_sorted : forall (fs:FileSystem),
@@ -708,23 +549,22 @@ Function fs_sort_other (fs:FileSystem)
     in x' :: fs_sort_other fs'
   end.
 Proof.
-  - intros. assert (file n s :: fs' = (file n s :: nil) ++ fs').
-    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+  - intros. rewrite <- teq. assert (fs = (file n n0 :: nil) ++ fs').
+    1:rewrite teq; reflexivity. rewrite H. rewrite fs_inode_total_concat.
     pattern (fs_inode_total fs') at 1. rewrite <- Nat.add_0_l.
     apply Nat.add_lt_mono_r. assert (fs_inode_total nil = 0).
     + unfold fs_inode_total. apply fs_fold_level_nil.
     + rewrite <- H0. apply fs_inode_total_cons_gt.
-  - intros. assert (dir n fs'0 :: fs' = (dir n fs'0 :: nil) ++ fs').
-    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+  - intros. rewrite <- teq. assert (fs = (dir n fs'0 :: nil) ++ fs').
+    1:rewrite teq; reflexivity. rewrite H. rewrite fs_inode_total_concat.
     pattern (fs_inode_total fs') at 1. rewrite <- Nat.add_0_l.
     apply Nat.add_lt_mono_r. assert (fs_inode_total nil = 0).
     + unfold fs_inode_total. apply fs_fold_level_nil.
     + rewrite <- H0. apply fs_inode_total_cons_gt.
-  - intros. rewrite fs_inode_total_sorted.
-    assert (dir n fs'0 :: fs' = (dir n fs'0 :: nil) ++ fs').
-    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
-    pattern (fs_inode_total fs'0) at 1. rewrite <- Nat.add_0_r.
-    apply Nat.add_lt_le_mono.
+  - intros. rewrite fs_inode_total_sorted. rewrite <- teq.
+    assert (fs = (dir n fs'0 :: nil) ++ fs'). 1:rewrite teq; reflexivity.
+    rewrite H. rewrite fs_inode_total_concat. pattern (fs_inode_total fs'0) at 1.
+    rewrite <- Nat.add_0_r. apply Nat.add_lt_le_mono.
     + remember (fs_level_split (dir n fs'0 :: nil)) as p. assert (H0 := Heqp).
       unfold fs_level_split in H0. simpl in H0.
       rewrite Heqp in H0. clear Heqp p. rewrite app_nil_r in H0.
@@ -745,14 +585,14 @@ Fixpoint fs_group_level (fs:FileSystem) : list FileSystem :=
        | nil => (x :: nil) :: nil
        | xs::gs' => match hd_error xs with
                     | None => (x :: nil) :: gs
-                    | Some x' => if inode_eqb x x'
+                    | Some x' => if IM.eqb x x'
                                  then (x :: xs) :: gs'
                                  else (x :: nil) :: gs
                     end
        end
   end.
 
-Definition resolve_names (x1 x2:Inode) : (Name * Name)%type :=
+Definition resolve_names (x1 x2:Inode.t) : (nat * nat)%type :=
   match x1, x2 with
   | dir n1 _,  dir n2 _  => (n1, n2)
   | dir n1 _,  file n2 _ => (n1, n2)
@@ -760,22 +600,22 @@ Definition resolve_names (x1 x2:Inode) : (Name * Name)%type :=
   | file n1 _, file n2 _ => (n1, n2)
   end.
 
-Lemma fs_inode_total_insert_gt_0 : forall (x:Inode) (fs:FileSystem),
+Lemma fs_inode_total_insert_gt_0 : forall (x:Inode.t) (fs:FileSystem),
     0 < fs_inode_total (fs_sort_insert x fs).
 Proof.
   intros. unfold fs_sort_insert. destruct fs.
   - assert (fs_inode_total nil = 0).
     + unfold fs_inode_total. apply fs_fold_level_nil.
     + rewrite <- H. apply fs_inode_total_cons_gt.
-  - destruct (inode_compare x i).
-    + assert (x :: i :: fs = (x :: nil) ++ (i :: fs)). 1:reflexivity.
+  - destruct (Inode.compare x t).
+    + assert (x :: t :: fs = (x :: nil) ++ (t :: fs)). 1:reflexivity.
       rewrite H. rewrite fs_inode_total_concat.
       pattern 0. rewrite <- Nat.add_0_l. apply Nat.add_lt_le_mono.
       * assert (fs_inode_total nil = 0).
         -- unfold fs_inode_total. apply fs_fold_level_nil.
         -- rewrite <- H0. apply fs_inode_total_cons_gt.
       * apply fs_inode_total_ge_0.
-    + assert (x :: i :: fs = (x :: nil) ++ (i :: fs)). 1:reflexivity.
+    + assert (x :: t :: fs = (x :: nil) ++ (t :: fs)). 1:reflexivity.
       rewrite H. rewrite fs_inode_total_concat.
       pattern 0. rewrite <- Nat.add_0_l. apply Nat.add_lt_le_mono.
       * assert (fs_inode_total nil = 0).
@@ -783,7 +623,7 @@ Proof.
         -- rewrite <- H0. apply fs_inode_total_cons_gt.
       * apply fs_inode_total_ge_0.
     + fold fs_sort_insert. remember (fs_sort_insert x fs) as fs'.
-      assert (i :: fs' = (i :: nil) ++ fs'). 1:reflexivity.
+      assert (t :: fs' = (t :: nil) ++ fs'). 1:reflexivity.
       rewrite H. rewrite fs_inode_total_concat.
       pattern 0. rewrite <- Nat.add_0_l. apply Nat.add_lt_le_mono.
       * assert (fs_inode_total nil = 0).
@@ -803,8 +643,8 @@ Proof.
       assert (a :: fs = (a :: nil) ++ fs). 1:reflexivity.
       rewrite H. rewrite fs_inode_total_concat. rewrite <- IHfs. reflexivity.
     + rewrite map_cons in IHfs. simpl in IHfs. destruct (hd_error f).
-      * destruct (inode_eqb a i); assert (a :: fs = (a :: nil) ++ fs);
-          try (reflexivity || fail); rewrite H; rewrite fs_inode_total_concat.
+      * destruct (IM.eqb a t); assert (a :: fs = (a :: nil) ++ fs);
+          try reflexivity; rewrite H; rewrite fs_inode_total_concat.
         -- rewrite map_cons. assert (a :: f = (a :: nil) ++ f). 1:reflexivity.
            rewrite H0. rewrite fs_inode_total_concat. rewrite <- IHfs.
            unfold fold_right. ring_simplify. reflexivity.
@@ -816,7 +656,7 @@ Proof.
 Qed.
 
 Lemma fs_inode_total_compacted :
-  forall (n n1 n2:Name) (fs fs1 fs2:FileSystem),
+  forall (n n1 n2:nat) (fs fs1 fs2:FileSystem),
     fs_inode_total (dir n (fs1 ++ fs2) :: fs) <
     fs_inode_total (dir n1 fs1 :: dir n2 fs2 :: fs).
 Proof.
@@ -845,7 +685,7 @@ Proof.
   simpl. rewrite <- Nat.succ_lt_mono. apply Nat.add_lt_mono_l. auto.
 Qed.
 
-Lemma fs_inode_total_perm : forall (x1 x2:Inode) (fs:FileSystem),
+Lemma fs_inode_total_perm : forall (x1 x2:Inode.t) (fs:FileSystem),
     fs_inode_total (x1 :: x2 :: fs) = fs_inode_total (x2 :: x1 :: fs).
 Proof.
   intros. assert (x1 :: x2 :: fs = (x1 :: nil) ++ (x2 :: fs)).
@@ -857,12 +697,12 @@ Proof.
 Qed.
 
 Function fs_compact_group (fs:FileSystem)
-         {measure fs_inode_total fs} : option Inode :=
+         {measure fs_inode_total fs} : option Inode.t :=
   match fs with
   | nil => None
   | x1::nil => Some x1
   | x1::x2::fs' =>
-    if inode_eqb x1 x2
+    if IM.eqb x1 x2
     then let
         (n1, n2) := resolve_names x1 x2
       in match x1, x2 with
@@ -878,12 +718,12 @@ Proof.
     apply (fs_inode_total_compacted n1 n n0 fs' fs1 fs2).
 Qed.
 
-Lemma fs_compacted_group_eq : forall (x y:Inode) (fs:FileSystem),
-    fs_compact_group (x :: fs) = Some y -> inode_eqb x y = true.
+Lemma fs_compacted_group_eq : forall (x y:Inode.t) (fs:FileSystem),
+    fs_compact_group (x :: fs) = Some y -> Inode.eq x y.
 Proof.
   intros x y fs. remember (x :: fs) as fs'. revert x fs Heqfs'.
   functional induction fs_compact_group fs'; intros; inversion H.
-  - inversion Heqfs'. rewrite <- H1. rewrite <- H2. apply inode_eqb_eq.
+  - inversion Heqfs'. rewrite <- H1. rewrite <- H2. reflexivity.
   - specialize (IHo (dir n1 (fs1 ++ fs2)) fs').
     assert (dir n1 (fs1 ++ fs2) :: fs' = dir n1 (fs1 ++ fs2) :: fs').
     1:reflexivity. specialize (IHo H0 H). inversion Heqfs'. simpl in e1.
@@ -893,7 +733,7 @@ Proof.
     specialize (IHo H0 H). inversion Heqfs'. assumption.
 Qed.
 
-Lemma fs_compacted_group_dir_cons : forall (n:Name) (fs fs1 fs2:FileSystem),
+Lemma fs_compacted_group_dir_cons : forall (n:nat) (fs fs1 fs2:FileSystem),
     fs_compact_group (dir n fs1 :: dir n fs2 :: fs) =
     fs_compact_group (dir n (fs1 ++ fs2) :: fs).
 Proof.
@@ -901,11 +741,13 @@ Proof.
   functional induction fs_compact_group fs'; inversion Heqfs'.
   - repeat f_equal. simpl in e1. inversion e1. rewrite <- H5. assumption.
   - rewrite H0 in y. rewrite H1 in y. inversion y.
-  - rewrite H0 in e0. rewrite H1 in e0. simpl in e0. assert (n = n).
-    1:reflexivity. apply Nat.eqb_eq in H. rewrite H in e0. discriminate e0.
+  - rewrite H0 in e0. rewrite H1 in e0. simpl in e0.
+    assert (n = n). 1:reflexivity. rewrite IM.eqb_alt in e0.
+    destruct (Inode.compare (dir n fs1) (dir n fs2)); try discriminate;
+      simpl in l; contradiction (Nat.lt_irrefl n).
 Qed.
 
-Lemma fs_compacted_group_file_cons : forall (n:Name) (s:Storage) (fs:FileSystem),
+Lemma fs_compacted_group_file_cons : forall (n:nat) (s:nat) (fs:FileSystem),
     fs_compact_group (file n s :: file n s :: fs) =
     fs_compact_group (file n s :: fs).
 Proof.
@@ -913,46 +755,54 @@ Proof.
   functional induction fs_compact_group fs'; inversion Heqfs'.
   - reflexivity.
   - rewrite H0 in y. rewrite H1 in y. inversion y.
-  - rewrite H0 in e0. rewrite H1 in e0. simpl in e0.
-    apply Bool.andb_false_iff in e0. destruct e0.
-    + assert (n = n). 1:reflexivity. apply Nat.eqb_eq in H3. rewrite H3 in H.
-      discriminate H.
-    + assert (s = s). 1:reflexivity. apply Nat.eqb_eq in H3. rewrite H3 in H.
-      discriminate H.
+  - rewrite H0 in e0. rewrite H1 in e0. simpl in e0. rewrite IM.eqb_alt in e0.
+    destruct (Inode.compare (file n s) (file n s)); try discriminate;
+      simpl in l; destruct l; try contradiction (Nat.lt_irrefl n);
+        destruct H; contradiction (Nat.lt_irrefl s).
 Qed.
 
-Lemma fs_compacted_group_cons : forall (x y:Inode) (fs:FileSystem),
-    fs_compact_group fs = Some y -> inode_eqb x y = true ->
-    exists (z:Inode), fs_compact_group (x :: fs) = Some z.
+Lemma fs_compacted_group_cons : forall (x y:Inode.t) (fs:FileSystem),
+    fs_compact_group fs = Some y -> Inode.eq x y ->
+    exists (z:Inode.t), fs_compact_group (x :: fs) = Some z.
 Proof.
-  intros. destruct x; destruct y; simpl in H0; inversion H0.
-  - apply Bool.andb_true_iff in H0. do 2 rewrite Nat.eqb_eq in H0.
-    inversion H0. rewrite <- H1 in H. rewrite <- H3 in H. clear H0 H1 H2 H3 n0 s0.
+  intros. remember (x :: fs) as fs'.
+  destruct x; destruct y; intros. simpl in H0; inversion H0.
+  - rewrite <- H1, <- H2 in H. clear H0 H1 H2 n1 n2.
     functional induction fs_compact_group fs; inversion H.
-    + inversion H. rewrite fs_compacted_group_file_cons.
-      remember (file n s :: nil) as fs.
+    + inversion H. rewrite <- H1 in Heqfs'. rewrite Heqfs'. clear Heqfs'.
+      assert (fs_compact_group (x1 :: x1 :: nil) = fs_compact_group (x1 :: nil)).
+      1:rewrite H1; apply fs_compacted_group_file_cons. rewrite H0. clear H0.
+      remember (x1 :: nil) as fs.
       functional induction fs_compact_group fs; inversion Heqfs. eauto.
-    + pose proof (fs_compacted_group_eq (dir n1 (fs1 ++ fs2)) fs' H).
-      simpl in H0. discriminate H0.
-    + specialize (IHo H). simpl in e0. apply Bool.andb_true_iff in e0.
-      do 2 rewrite Nat.eqb_eq in e0. inversion e0. rewrite <- H0. rewrite <- H2.
-      pose proof (fs_compacted_group_eq (file _x _x0) fs' H). simpl in H3.
-      apply Bool.andb_true_iff in H3. do 2 rewrite Nat.eqb_eq in H3.
-      inversion H3. rewrite H4. rewrite H5. rewrite H4 in IHo. rewrite H5 in IHo.
-      rewrite fs_compacted_group_file_cons. assumption.
-  - apply Nat.eqb_eq in H0. rewrite <- H0 in H.
-    functional induction fs_compact_group fs; inversion H.
-    + inversion H. rewrite (fs_compacted_group_dir_cons n nil l l0).
-      remember (dir n (l ++ l0) :: nil) as fs.
-      functional induction fs_compact_group fs; inversion Heqfs. eauto.
-    + specialize (IHo H). simpl in e0. apply Nat.eqb_eq in e0.
-      rewrite <- e0. simpl in e1. inversion e1.
+    + pose proof (fs_compacted_group_eq (dir n1 (fs1 ++ fs2)) fs'0 H).
+      simpl in H0. contradiction.
+    + rewrite IM.eqb_alt in e0.
+      destruct (Inode.compare (file _x _x0) (file _x1 _x2)) in e0;
+        try discriminate. simpl in e. inversion e. rewrite <- H0, <- H2 in Heqfs'.
+      pose proof (fs_compacted_group_eq (file _x _x0) fs'0 H). simpl in H3.
+      inversion H3. rewrite H4, H5 in Heqfs', H. rewrite Heqfs'.
+      do 2 rewrite fs_compacted_group_file_cons. eauto.
+  - simpl in H0. contradiction.
+  - simpl in H0. contradiction.
+  - simpl in H0. rewrite <- H0 in H. revert fs' Heqfs'.
+    functional induction fs_compact_group fs; inversion H; intros.
+    + remember (dir n (l ++ l0) :: nil) as fs.
+      assert (fs_compact_group fs' = fs_compact_group fs).
+      1:rewrite Heqfs', Heqfs. apply fs_compacted_group_dir_cons. rewrite H1.
+      clear H1. functional induction fs_compact_group fs; inversion Heqfs. eauto.
+    + specialize (IHo H). rewrite IM.eqb_alt in e0.
+      destruct (Inode.compare (dir _x fs1) (dir _x0 fs2)); try discriminate e0.
+      simpl in e. rewrite <- e in e1, Heqfs'. simpl in e1. inversion e1.
+      rewrite H3 in Heqfs'. remember (dir n l :: dir n1 (fs1 ++ fs2) :: fs') as fs.
+      specialize (IHo fs Heqfs).
       pose proof (fs_compacted_group_eq (dir n1 (fs1 ++ fs2)) fs' H).
-      simpl in H1. apply Nat.eqb_eq in H1. rewrite H1. rewrite H1 in IHo.
-      do 2 rewrite fs_compacted_group_dir_cons. rewrite <- List.app_assoc.
-      rewrite fs_compacted_group_dir_cons in IHo. assumption.
+      simpl in H1. rewrite H1 in H, Heqfs, Heqfs'.
+      assert (fs_compact_group fs'0 = fs_compact_group fs).
+      * rewrite Heqfs, Heqfs'. do 3 rewrite fs_compacted_group_dir_cons.
+        rewrite <- List.app_assoc. reflexivity.
+      * rewrite H5. assumption.
     + pose proof (fs_compacted_group_eq (file _x _x0) fs' H). simpl in H1.
-      discriminate H1.
+      contradiction.
 Qed.
 
 Fixpoint fs_compact_groups (gs:list FileSystem) : FileSystem :=
@@ -1015,27 +865,27 @@ Function fs_compact_other (fs:FileSystem)
     in x' :: fs_compact_other fs'
   end.
 Proof.
-  - intros. assert (file n s :: fs' = (file n s :: nil) ++ fs').
-    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+  - intros. rewrite <- teq. assert (fs = (x :: nil) ++ fs').
+    1:rewrite teq, teq0; reflexivity. rewrite H. rewrite fs_inode_total_concat.
     pattern (fs_inode_total fs') at 1. rewrite <- Nat.add_0_l.
     apply Nat.add_lt_mono_r. assert (fs_inode_total nil = 0).
     + unfold fs_inode_total. apply fs_fold_level_nil.
     + rewrite <- H0. apply fs_inode_total_cons_gt.
-  - intros. assert (dir n fs'0 :: fs' = (dir n fs'0 :: nil) ++ fs').
-    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+  - intros. rewrite <- teq. assert (fs = (x :: nil) ++ fs').
+    1:rewrite teq, teq0; reflexivity. rewrite H. rewrite fs_inode_total_concat.
     pattern (fs_inode_total fs') at 1. rewrite <- Nat.add_0_l.
     apply Nat.add_lt_mono_r. assert (fs_inode_total nil = 0).
     + unfold fs_inode_total. apply fs_fold_level_nil.
     + rewrite <- H0. apply fs_inode_total_cons_gt.
-  - intros. assert (dir n fs'0 :: fs' = (dir n fs'0 :: nil) ++ fs').
-    1:reflexivity. rewrite H. rewrite fs_inode_total_concat.
+  - intros. rewrite <- teq. assert (fs = (x :: nil) ++ fs').
+    1:rewrite teq, teq0; reflexivity. rewrite H. rewrite fs_inode_total_concat.
     pattern (fs_inode_total (fs_compact_level fs'0)) at 1.
     rewrite <- Nat.add_0_r. apply Nat.add_lt_le_mono.
-    + remember (fs_level_split (dir n fs'0 :: nil)) as p. assert (H0 := Heqp).
+    + remember (fs_level_split (x :: nil)) as p. assert (H0 := Heqp).
       unfold fs_level_split in H0. simpl in H0.
       rewrite Heqp in H0. clear Heqp p. rewrite app_nil_r in H0.
-      rewrite (fs_inode_total_cons (dir n fs'0 :: nil) H0).
-      simpl. apply Nat.lt_succ_r. apply fs_compact_level_dec.
+      rewrite (fs_inode_total_cons (x :: nil) H0).
+      simpl. apply Nat.lt_succ_r. rewrite teq0. apply fs_compact_level_dec.
     + apply fs_inode_total_ge_0.
 Qed.
 
@@ -1045,15 +895,15 @@ Definition fs_compact (fs:FileSystem) : FileSystem :=
 Definition fs_merge (fs1 fs2:FileSystem) : FileSystem :=
   fs_compact (fs_sort (fs1 ++ fs2)).
 
-Fixpoint fs_inode_lookup (x:Inode) (fs:FileSystem) : option Inode :=
+Fixpoint fs_inode_lookup (x:Inode.t) (fs:FileSystem) : option Inode.t :=
   match fs with
   | nil => None
-  | x'::fs' => if inode_eqb x x'
+  | x'::fs' => if IM.eqb x x'
                then Some x'
                else fs_inode_lookup x fs'
   end.
 
-Fixpoint fs_find (xs:list Inode) (fs:FileSystem) : Prop :=
+Fixpoint fs_find (xs:list Inode.t) (fs:FileSystem) : Prop :=
   match xs with
   | nil => True
   | x::xs' => match fs_inode_lookup x fs with
@@ -1065,7 +915,7 @@ Fixpoint fs_find (xs:list Inode) (fs:FileSystem) : Prop :=
               end
   end.
 
-Fixpoint fs_inode_lookup_group (x:Inode) (gs:list FileSystem) : option Inode :=
+Fixpoint fs_inode_lookup_group (x:Inode.t) (gs:list FileSystem) : option Inode.t :=
   match gs with
   | nil => None
   | g::gs' => match fs_inode_lookup x g with
@@ -1074,130 +924,133 @@ Fixpoint fs_inode_lookup_group (x:Inode) (gs:list FileSystem) : option Inode :=
               end
   end.
 
-Lemma fs_lookup_eq : forall (x y:Inode) (fs:FileSystem),
-    fs_inode_lookup x fs = Some y -> inode_eqb x y = true.
+Lemma fs_lookup_eq : forall (x y:Inode.t) (fs:FileSystem),
+    fs_inode_lookup x fs = Some y -> Inode.eq x y.
 Proof.
   intros. induction fs; simpl in H. 1:discriminate H.
-  case_eq (inode_eqb x a); intro H0. rewrite H0 in H. inversion H.
-  - rewrite H2 in H0. assumption.
+  case_eq (IM.eqb x a); intro H0. rewrite H0 in H. inversion H.
+  - rewrite H2 in H0. rewrite IM.eqb_alt in H0.
+    destruct (Inode.compare x y); try discriminate H0. assumption.
   - rewrite H0 in H. specialize (IHfs H). assumption.
 Qed.
 
-Lemma fs_lookup_cons_none : forall (x y:Inode) (fs:FileSystem),
+Lemma fs_lookup_cons_none : forall (x y:Inode.t) (fs:FileSystem),
     fs_inode_lookup x (y :: fs) = None -> fs_inode_lookup x fs = None.
 Proof.
   intros. unfold fs_inode_lookup in H.
-  fold fs_inode_lookup in H. unfold inode_eqb in H.
-  case_eq x; intros; rewrite H0 in H; destruct y in H;
-    case_eq (n =? n0); intro H1; try (assumption || fail); rewrite H1 in H.
-  - case_eq (s =? s0); intro H2; rewrite H2 in H; simpl in H;
-      [discriminate | assumption].
-  - simpl in H. assumption.
-  - discriminate.
-  - assumption.
+  fold fs_inode_lookup in H. destruct (IM.eqb x y); [discriminate H | assumption].
 Qed.
 
-Lemma fs_lookup_cons_some : forall (x y:Inode) (fs:FileSystem),
-    fs_inode_lookup x fs = Some y -> exists (z:Inode),
+Lemma fs_lookup_cons_some : forall (x y:Inode.t) (fs:FileSystem),
+    fs_inode_lookup x fs = Some y -> exists (z:Inode.t),
       fs_inode_lookup x (y :: fs) = Some z.
 Proof.
   intros. unfold fs_inode_lookup in H. destruct fs. 1:discriminate.
-  fold fs_inode_lookup in H. case_eq (inode_eqb x i); intro H0; rewrite H0 in H.
+  fold fs_inode_lookup in H. case_eq (IM.eqb x t); intro H0; rewrite H0 in H.
   - inversion H. rewrite H2 in H0. exists y. simpl. rewrite H0. reflexivity.
-  - exists y. simpl. destruct (inode_eqb x y). 1:reflexivity.
+  - exists y. simpl. destruct (IM.eqb x y). 1:reflexivity.
     rewrite H0. assumption.
 Qed.
 
-Lemma fs_lookup_inserted : forall (x x' y:Inode) (fs:FileSystem),
-    fs_inode_lookup x fs = Some x' -> exists (z:Inode),
+Lemma fs_lookup_inserted : forall (x x' y:Inode.t) (fs:FileSystem),
+    fs_inode_lookup x fs = Some x' -> exists (z:Inode.t),
       fs_inode_lookup x (fs_sort_insert y fs) = Some z.
 Proof.
-  intros. induction fs. 1:discriminate H. simpl. destruct (inode_compare y a).
-  - simpl. destruct (inode_eqb x y).
+  intros. induction fs. 1:discriminate H. simpl. destruct (Inode.compare y a).
+  - simpl. destruct (IM.eqb x y).
     + exists y. reflexivity.
     + simpl in H. rewrite H. exists x'. reflexivity.
-  - simpl. destruct (inode_eqb x y).
+  - simpl. destruct (IM.eqb x y).
     + exists y. reflexivity.
     + simpl in H. rewrite H. exists x'. reflexivity.
-  - simpl. simpl in H. destruct (inode_eqb x a).
+  - simpl in *. destruct (IM.eqb x a).
     + exists a. reflexivity.
     + specialize (IHfs H). assumption.
 Qed.
 
-Lemma fs_lookup_sorted_level : forall (x y:Inode) (fs:FileSystem),
-    fs_inode_lookup x fs = Some y -> exists (z:Inode),
+Lemma fs_lookup_sorted_level : forall (x y:Inode.t) (fs:FileSystem),
+    fs_inode_lookup x fs = Some y -> exists (z:Inode.t),
       fs_inode_lookup x (fs_sort_level fs) = Some z.
 Proof.
   intros x y fs. revert x y. induction fs; intros. 1:discriminate H.
-  simpl. simpl in H. case_eq (inode_eqb x a); intro H0; rewrite H0 in H.
+  simpl. simpl in H. case_eq (IM.eqb x a); intro H0; rewrite H0 in H.
   - inversion H. rewrite H2 in H0. clear H H2 a. clear IHfs.
     remember (fs_sort_level fs) as fs''. revert fs Heqfs''.
     induction fs''; intros.
     + simpl. rewrite H0. eauto.
     + destruct fs. 1:discriminate. simpl in Heqfs''. destruct fs.
       * inversion Heqfs''. simpl.
-        destruct (inode_compare y i); simpl; rewrite H0; try eauto.
-        destruct (inode_eqb x i); eauto.
-      * pose proof (fs_sort_level_cons i0 fs).
-        destruct H as [i' H]. destruct H as [fs' H].
+        destruct (Inode.compare y t); simpl; rewrite H0; try eauto.
+        destruct (IM.eqb x t); eauto.
+      * pose proof (fs_sort_level_cons t0 fs).
+        destruct H as [t' H]. destruct H as [fs' H].
         rewrite H in Heqfs''. simpl in Heqfs''.
-        destruct (inode_compare i i'); inversion Heqfs''; rewrite <- H3; simpl.
-        -- destruct (inode_compare y i); simpl; try (rewrite H0); try eauto.
-           destruct (inode_eqb x i). 1:eauto.
-           rewrite <- H in H3. specialize (IHfs'' (i0 :: fs) H3). assumption.
-        -- destruct (inode_compare y i); simpl; try (rewrite H0); try eauto.
-           destruct (inode_eqb x i). 1:eauto.
-           rewrite <- H in H3. specialize (IHfs'' (i0 :: fs) H3). assumption.
-        -- destruct (inode_compare y i'); simpl; try (rewrite H0); try eauto.
-           destruct (inode_eqb x i'). 1:eauto.
-           symmetry in H. pose proof (fs_sort_level_dec (i0 :: fs) H).
+        destruct (Inode.compare t t'); inversion Heqfs''; rewrite <- H3; simpl.
+        -- destruct (Inode.compare y t); simpl; try (rewrite H0); try eauto.
+           destruct (IM.eqb x t). 1:eauto.
+           rewrite <- H in H3. specialize (IHfs'' (t0 :: fs) H3). assumption.
+        -- destruct (Inode.compare y t); simpl; try (rewrite H0); try eauto.
+           destruct (IM.eqb x t). 1:eauto.
+           rewrite <- H in H3. specialize (IHfs'' (t0 :: fs) H3). assumption.
+        -- destruct (Inode.compare y t'); simpl; try (rewrite H0); try eauto.
+           destruct (IM.eqb x t'). 1:eauto.
+           symmetry in H. pose proof (fs_sort_level_dec (t0 :: fs) H).
            destruct H1 as [fs''' H1]. rewrite H1 in H3.
-           assert (fs_sort_insert i (fs_sort_level fs''') =
-                   fs_sort_level (i :: fs''')).
+           assert (fs_sort_insert t (fs_sort_level fs''') =
+                   fs_sort_level (t :: fs''')).
            ++ induction fs'''; reflexivity.
-           ++ rewrite H4 in H3. specialize (IHfs'' (i :: fs''') H3).
+           ++ rewrite H4 in H3. specialize (IHfs'' (t :: fs''') H3).
               assumption.
   - specialize (IHfs x y H). remember (fs_sort_level fs) as fs'.
     clear Heqfs' H y fs. destruct IHfs as [y IHfs].
     induction fs'. 1:discriminate. simpl.
-    destruct (inode_compare a a0); simpl; case_eq (inode_eqb x a0); intro;
+    destruct (Inode.compare a a0); simpl; case_eq (IM.eqb x a0); intro;
       try (rewrite H0); eauto; simpl in IHfs; rewrite H in IHfs; eauto.
 Qed.
 
-Lemma fs_lookup_sorted : forall (x y:Inode) (fs:FileSystem),
-    fs_inode_lookup x fs = Some y -> exists (z:Inode),
+Lemma fs_lookup_sorted : forall (x y:Inode.t) (fs:FileSystem),
+    fs_inode_lookup x fs = Some y -> exists (z:Inode.t),
       fs_inode_lookup x (fs_sort fs) = Some z.
 Proof.
   intros. unfold fs_sort.
-  assert (exists (z:Inode), fs_inode_lookup x (fs_sort_level fs) = Some z).
+  assert (exists (z:Inode.t), fs_inode_lookup x (fs_sort_level fs) = Some z).
   1:apply (fs_lookup_sorted_level x fs H). remember (fs_sort_level fs) as fs'.
   clear H Heqfs' y fs. destruct H0 as [y H0].
   functional induction fs_sort_other fs'; simpl in H0.
   - discriminate.
-  - simpl. destruct (inode_eqb x (file _x _x0)). 1:eauto.
+  - simpl. destruct (IM.eqb x (file _x _x0)). 1:eauto.
     specialize (IHf H0). assumption.
   - remember (fs_sort_other (fs_sort_level fs'0)) as fs.
-    case_eq (inode_eqb x (dir n fs'0)); intro H; rewrite H in H0;
+    case_eq (IM.eqb x (dir n fs'0)); intro H; rewrite H in H0;
       destruct x; simpl in H.
-    + discriminate.
-    + simpl. rewrite H. eauto.
-    + specialize (IHf0 H0). simpl. assumption.
-    + specialize (IHf0 H0). simpl. rewrite H. assumption.
+    + rewrite IM.eqb_alt in H. destruct (Inode.compare (file n0 n1) (dir n fs'0));
+                                 discriminate H || contradiction.
+    + rewrite IM.eqb_alt in H.
+      destruct (Inode.compare (dir n0 l) (dir n fs'0)); try discriminate H.
+      simpl in *. rewrite e. assert (IM.eqb (dir n l) (dir n fs) = true).
+      * rewrite IM.eqb_alt.
+        destruct (Inode.compare (dir n l) (dir n fs)); try reflexivity;
+          simpl in *; contradiction (Nat.lt_irrefl n).
+      * rewrite H1. eauto.
+    + specialize (IHf0 H0). simpl.
+      destruct (IM.eqb (file n0 n1) (dir n fs)); [eauto | assumption].
+    + specialize (IHf0 H0). simpl.
+      destruct (IM.eqb (dir n0 l) (dir n fs)); [eauto | assumption].
 Qed.
 
-Lemma fs_lookup_grouped_level : forall (x y:Inode) (fs:FileSystem),
-    fs_inode_lookup x fs = Some y -> exists (z:Inode),
+Lemma fs_lookup_grouped_level : forall (x y:Inode.t) (fs:FileSystem),
+    fs_inode_lookup x fs = Some y -> exists (z:Inode.t),
       fs_inode_lookup_group x (fs_group_level fs) = Some z.
 Proof.
   intros x y fs. revert x y. induction fs; intros. 1:discriminate H.
-  simpl in H. case_eq (inode_eqb x a); intro H0; rewrite H0 in H.
+  simpl in H. case_eq (IM.eqb x a); intro H0; rewrite H0 in H.
   - inversion H. rewrite H2 in H0. simpl. destruct (fs_group_level fs).
     + simpl. rewrite H0. eauto.
-    + destruct (hd_error f); try (destruct (inode_eqb y i));
+    + destruct (hd_error f); try (destruct (IM.eqb y t));
         simpl; rewrite H0; eauto.
   - specialize (IHfs x y H). destruct IHfs as [z IHfs].
     simpl. destruct (fs_group_level fs).
     + unfold fs_inode_lookup_group in IHfs. discriminate.
-    + destruct (hd_error f); try (destruct (inode_eqb a i)); simpl; rewrite H0;
+    + destruct (hd_error f); try (destruct (IM.eqb a t)); simpl; rewrite H0;
         simpl in IHfs; rewrite IHfs; eauto.
 Qed.

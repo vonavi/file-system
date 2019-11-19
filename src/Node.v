@@ -1,28 +1,33 @@
+Set Implicit Arguments.
 Require Import OrderedType.
 Require Import Classes.RelationClasses.
 
+Section Node.
+  Variables Name Storage : Type.
+  Inductive Node : Type :=
+  | file : Name -> Storage -> Node
+  | dir : Name -> list Node -> Node.
+End Node.
+
 Module Node_as_OT (N S:OrderedType) <: OrderedType.
   Module MN := OrderedTypeFacts N.
+  Module MS := OrderedTypeFacts S.
 
-  Inductive Node : Type :=
-  | file : N.t -> S.t -> Node
-  | dir : N.t -> list Node -> Node.
+  Definition t := Node N.t S.t.
 
-  Definition t := Node.
-
-  Definition eq (x1 x2:Node) : Prop :=
+  Definition eq (x1 x2 : t) : Prop :=
     match x1, x2 with
-    | dir n1 _, dir n2 _ => N.eq n1 n2
-    | file n1 s1, file n2 s2 => N.eq n1 n2 /\ S.eq s1 s2
+    | @dir _ _ n1 _, @dir _ _ n2 _ => N.eq n1 n2
+    | @file _ _ n1 s1, @file _ _ n2 s2 => N.eq n1 n2 /\ S.eq s1 s2
     | _, _ => False
     end.
 
-  Definition lt (x1 x2:Node) : Prop :=
+  Definition lt (x1 x2 : t) : Prop :=
     match x1, x2 with
-    | dir n1 _, dir n2 _ => N.lt n1 n2
-    | dir n1 _, file n2 _ => N.lt n1 n2
-    | file n1 _, dir n2 _ => N.lt n1 n2 \/ N.eq n1 n2
-    | file n1 s1, file n2 s2 => (N.lt n1 n2) \/ (N.eq n1 n2 /\ S.lt s1 s2)
+    | @dir _ _ n1 _, @dir _ _ n2 _ => N.lt n1 n2
+    | @dir _ _ n1 _, @file _ _ n2 _ => N.lt n1 n2
+    | @file _ _ n1 _, @dir _ _ n2 _ => N.lt n1 n2 \/ N.eq n1 n2
+    | @file _ _ n1 s1, @file _ _ n2 s2 => (N.lt n1 n2) \/ (N.eq n1 n2 /\ S.lt s1 s2)
     end.
 
   Lemma eq_refl : Reflexive eq.
@@ -65,7 +70,7 @@ Module Node_as_OT (N S:OrderedType) <: OrderedType.
     | _ => idtac
     end.
 
-  Lemma lt_trans : forall (x y z:Node), lt x y -> lt y z -> lt x z.
+  Lemma lt_trans : forall (x y z : t), lt x y -> lt y z -> lt x z.
   Proof.
     intros. destruct x, y, z; simpl_lt_cases.
     all: try assumption || (left; assumption) ||
@@ -75,7 +80,7 @@ Module Node_as_OT (N S:OrderedType) <: OrderedType.
     - right. assumption.
   Qed.
 
-  Lemma lt_not_eq : forall (x y:Node), lt x y -> ~ eq x y.
+  Lemma lt_not_eq : forall (x y : t), lt x y -> ~ eq x y.
   Proof.
     intros. unfold not; intro. destruct x, y; simpl in *; try contradiction.
     - destruct H, H0.
@@ -84,7 +89,7 @@ Module Node_as_OT (N S:OrderedType) <: OrderedType.
     - contradiction (N.lt_not_eq H).
   Qed.
 
-  Definition compare : forall (x y:Node), Compare lt eq x y.
+  Definition compare : forall (x y : t), Compare lt eq x y.
   Proof.
     intros; destruct x, y;
       [case_eq (N.compare t0 t2) | case_eq (N.compare t0 t2) |
@@ -105,7 +110,7 @@ Module Node_as_OT (N S:OrderedType) <: OrderedType.
     - apply EQ. simpl. assumption.
   Qed.
 
-  Definition eq_dec : forall (x y:Node), {eq x y} + {~ eq x y}.
+  Definition eq_dec : forall (x y : t), {eq x y} + {~ eq x y}.
   Proof.
     intros. destruct x, y; simpl; try auto.
     - case_eq (N.eq_dec t0 t2); case_eq (S.eq_dec t1 t3); intros;
