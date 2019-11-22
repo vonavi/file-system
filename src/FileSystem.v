@@ -79,6 +79,22 @@ Section FSLevel.
   Qed.
   Arguments split_cons {_ _ _ _ _ _}.
 
+  Lemma split_concat : forall (fs fs' l l' r r':FileSystem),
+      (l, r) = fs_split fs -> (l', r') = fs_split fs' ->
+      (l ++ l', r ++ r') = fs_split (fs ++ fs').
+  Proof.
+    intros. revert fs l r H. induction fs; intros.
+    - inversion H. do 3 rewrite app_nil_l. assumption.
+    - remember (fs_split fs) as p. rewrite Heqp in IHfs.
+      pattern p in Heqp. rewrite surjective_pairing in Heqp.
+      specialize (IHfs (fst p) (snd p) Heqp).
+      remember (node_split a) as q. pattern q in Heqq.
+      rewrite surjective_pairing in Heqq. rewrite <- app_comm_cons.
+      rewrite <- (split_cons Heqq IHfs). pose proof (split_cons Heqq Heqp).
+      rewrite <- H1 in H. inversion H. rewrite <- app_assoc.
+      apply injective_projections; reflexivity.
+  Qed.
+
   Lemma node_split_level_l : forall (x h:Node) (t:FileSystem),
       (h, t) = node_split x -> node_level h = 1.
   Proof.
