@@ -111,11 +111,11 @@ Section FSLevel.
 
   Lemma fs_split_level : forall (fs l r:FileSystem),
       nil <> fs -> (l, r) = fs_split fs ->
-      Nat.max (fs_level l) (S (fs_level r)) = fs_level fs.
+      fs_level fs = Nat.max (fs_level l) (S (fs_level r)).
   Proof.
     intro fs. destruct fs. 1:contradiction.
-    revert n. induction fs; intros; simpl.
-    - remember (node_split n) as p. pattern p in Heqp.
+    revert n. induction fs; intros.
+    - simpl. remember (node_split n) as p. pattern p in Heqp.
       rewrite surjective_pairing in Heqp. rewrite <- (split_eq Heqp) in H0.
       inversion H0. simpl. do 2 rewrite Nat.max_0_r.
       rewrite (node_split_level_l Heqp). rewrite <- (node_split_level_r Heqp).
@@ -124,13 +124,13 @@ Section FSLevel.
       rewrite surjective_pairing in Heqp. specialize (IHfs a (fst p) (snd p)).
       assert (nil <> a :: fs). 1:discriminate. specialize (IHfs H1 Heqp).
       remember (node_split n) as q. pattern q in Heqq.
-      rewrite surjective_pairing in Heqq. rewrite <- (node_split_level_r Heqq).
-      pose proof (split_cons Heqq Heqp). rewrite <- H2 in H0. inversion H0.
-      rewrite Nat.max_comm. rewrite level_concat.
-      rewrite level_cons. rewrite Nat.succ_max_distr. rewrite <- Nat.max_assoc.
-      f_equal. rewrite (node_split_level_l Heqq).
-      rewrite level_cons in IHfs. rewrite <- IHfs. rewrite Nat.max_comm. f_equal.
-      apply Nat.max_r_iff. destruct (fst p).
+      rewrite surjective_pairing in Heqq. pose proof (split_cons Heqq Heqp).
+      rewrite <- H2 in H0. inversion H0. rewrite level_cons. rewrite IHfs.
+      rewrite level_concat. rewrite Nat.succ_max_distr.
+      do 2 rewrite Nat.max_assoc. f_equal.
+      rewrite <- (node_split_level_r Heqq). rewrite Nat.max_comm. f_equal.
+      rewrite level_cons. rewrite (node_split_level_l Heqq).
+      symmetry. apply Nat.max_r_iff. destruct (fst p).
       + unfold fs_split in Heqp. simpl in Heqp. inversion Heqp.
       + assert (nil <> n0 :: f). 1:discriminate. apply (fs_level_gt_1 H3).
   Qed.
@@ -146,6 +146,6 @@ Section FSLevel.
     end.
   Proof.
     intros. assert (nil <> n :: l). 1:apply nil_cons. symmetry in teq0.
-    rewrite <- (fs_split_level H teq0). apply Nat.max_lt_iff. right. auto.
+    rewrite (fs_split_level H teq0). apply Nat.max_lt_iff. right. auto.
   Qed.
 End FSLevel.
