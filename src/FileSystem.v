@@ -8,61 +8,68 @@ Require Import Recdef.
 Add LoadPath ".".
 Require Import Node.
 
-Section FSLevel.
-  Variables Name Storage : Type.
-  Definition Node := @Node Name Storage.
-  Definition FileSystem := list Node.
+Section Defs.
+  Variables Name Tag : Type.
+  Definition FileSystem := list (Node Name Tag).
+End Defs.
 
-  Fixpoint node_level (x:Node) : nat :=
+Section FSLevel.
+  Variables Name Tag : Type.
+
+  Fixpoint node_level (x:Node Name Tag) : nat :=
     match x with
     | file _ _ => 1
     | dir _ fs => S (fold_right (fun x => Nat.max (node_level x)) O fs)
     end.
 
-  Definition fs_level (fs:FileSystem) : nat :=
+  Definition fs_level (fs:FileSystem Name Tag) : nat :=
     fold_right (fun x => Nat.max (node_level x)) O fs.
 
-  Lemma level_eq : forall (x:Node), node_level x = fs_level (x :: nil).
+  Lemma level_eq : forall (x:Node Name Tag),
+      node_level x = fs_level (x :: nil).
   Proof.
     intro. simpl. symmetry. apply Nat.max_0_r.
   Qed.
 
-  Lemma node_level_gt_1 : forall (x:Node), 1 <= node_level x.
+  Lemma node_level_gt_1 : forall (x:Node Name Tag), 1 <= node_level x.
   Proof.
     intro x. destruct x. 1:auto. simpl. rewrite <- Nat.succ_le_mono.
     induction l; simpl. 1:auto. apply Nat.max_le_iff. right. assumption.
   Qed.
 
-  Lemma fs_level_gt_1 : forall (fs:FileSystem), nil <> fs -> 1 <= fs_level fs.
+  Lemma fs_level_gt_1 : forall (fs:FileSystem Name Tag),
+      nil <> fs -> 1 <= fs_level fs.
   Proof.
     intros. destruct fs. 1:contradiction. simpl.
     apply Nat.max_le_iff. left. apply node_level_gt_1.
   Qed.
 
-  Lemma level_cons : forall (x:Node) (fs:FileSystem),
+  Lemma level_cons : forall (x:Node Name Tag) (fs:FileSystem Name Tag),
       fs_level (x :: fs) = Nat.max (node_level x) (fs_level fs).
   Proof.
     intros. simpl. f_equal.
   Qed.
 
-  Lemma level_concat : forall (fs fs':FileSystem),
+  Lemma level_concat : forall (fs fs':FileSystem Name Tag),
       fs_level (fs ++ fs') = Nat.max (fs_level fs) (fs_level fs').
   Proof.
     intros. induction fs; simpl. 1:reflexivity. rewrite IHfs.
     rewrite Nat.max_assoc. reflexivity.
   Qed.
 
-  Definition node_split (x:Node) : (Node * FileSystem)%type :=
+  Definition node_split (x:Node Name Tag) :
+    (Node Name Tag * FileSystem Name Tag)%type :=
     match x with
     | file _ _ => (x, nil)
     | dir n fs => (dir n nil, fs)
     end.
 
-  Definition fs_split (fs:FileSystem) : (FileSystem * FileSystem)%type :=
+  Definition fs_split (fs:FileSystem Name Tag) :
+    (FileSystem Name Tag * FileSystem Name Tag)%type :=
     let node_acc pair acc := (fst pair :: fst acc, snd pair ++ snd acc)
     in fold_right node_acc (nil, nil) (map node_split fs).
 
-  Lemma split_eq : forall (x h:Node) (t:FileSystem),
+  Lemma split_eq : forall (x h:Node Name Tag) (t:FileSystem Name Tag),
       (h, t) = node_split x -> (h :: nil, t) = fs_split (x :: nil).
   Proof.
     intros. unfold fs_split. simpl. rewrite app_nil_r.
@@ -70,7 +77,7 @@ Section FSLevel.
   Qed.
   Arguments split_eq {_ _ _}.
 
-  Lemma split_cons : forall (x h:Node) (fs t l r:FileSystem),
+  Lemma split_cons : forall (x h:Node Name Tag) (fs t l r:FileSystem Name Tag),
       (h, t) = node_split x -> (l, r) = fs_split fs ->
       (h :: l, t ++ r) = fs_split (x :: fs).
   Proof.
@@ -79,7 +86,7 @@ Section FSLevel.
   Qed.
   Arguments split_cons {_ _ _ _ _ _}.
 
-  Lemma split_concat : forall (fs fs' l l' r r':FileSystem),
+  Lemma split_concat : forall (fs fs' l l' r r':FileSystem Name Tag),
       (l, r) = fs_split fs -> (l', r') = fs_split fs' ->
       (l ++ l', r ++ r') = fs_split (fs ++ fs').
   Proof.
@@ -95,21 +102,21 @@ Section FSLevel.
       apply injective_projections; reflexivity.
   Qed.
 
-  Lemma node_split_level_l : forall (x h:Node) (t:FileSystem),
+  Lemma node_split_level_l : forall (x h:Node Name Tag) (t:FileSystem Name Tag),
       (h, t) = node_split x -> node_level h = 1.
   Proof.
     intros. destruct x; simpl in H; inversion H; reflexivity.
   Qed.
   Arguments node_split_level_l {_ _ _}.
 
-  Lemma node_split_level_r : forall (x h:Node) (t:FileSystem),
+  Lemma node_split_level_r : forall (x h:Node Name Tag) (t:FileSystem Name Tag),
       (h, t) = node_split x -> S (fs_level t) = node_level x.
   Proof.
     intros. destruct x; simpl in *; inversion H; reflexivity.
   Qed.
   Arguments node_split_level_r {_ _ _}.
 
-  Lemma fs_split_level : forall (fs l r:FileSystem),
+  Lemma fs_split_level : forall (fs l r:FileSystem Name Tag),
       nil <> fs -> (l, r) = fs_split fs ->
       fs_level fs = Nat.max (fs_level l) (S (fs_level r)).
   Proof.
@@ -136,7 +143,8 @@ Section FSLevel.
   Qed.
   Arguments fs_split_level {_ _ _}.
 
-  Function fold_level (A:Type) (f:Node->A->A) (a0:A) (fs:FileSystem)
+  Function fold_level
+           (A:Type) (f:Node Name Tag->A->A) (a0:A) (fs:FileSystem Name Tag)
            {measure fs_level fs} : A :=
     match fs with
     | nil => a0
