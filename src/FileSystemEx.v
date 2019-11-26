@@ -23,11 +23,11 @@ Proof.
   apply Nat.add_lt_mono_r. remember (x :: nil) as fs'. destruct x.
   - assert ((fs', nil) = fs_split fs').
     + rewrite Heqfs'. unfold fs_split. reflexivity.
-    + rewrite (split_l_size fs' H). rewrite Heqfs'. auto.
+    + rewrite (split_size fs' H). rewrite Heqfs'. unfold size.
+      rewrite fold_level_nil. auto.
   - assert ((dir n nil :: nil, l) = fs_split fs').
     + rewrite Heqfs'. unfold fs_split. simpl. rewrite app_nil_r. reflexivity.
-    + rewrite (split_size fs' H). rewrite (split_l_size fs' H). simpl.
-      apply Nat.lt_succ_r. apply size_ge_0.
+    + rewrite (split_size fs' H). simpl. apply Nat.lt_succ_r. apply size_ge_0.
 Qed.
 
 Function fs_map_inode (f:Inode.t->Inode.t) (fs:FileSystem)
@@ -49,9 +49,7 @@ Proof.
     pattern (size fs'') at 1. rewrite <- Nat.add_0_r. apply Nat.add_lt_le_mono.
     + assert ((dir n nil :: nil, fs'') = fs_split (dir n fs'' :: nil)).
       * unfold fs_split. simpl. rewrite app_nil_r. reflexivity.
-      * rewrite (split_size (dir n fs'' :: nil) H).
-        rewrite (split_l_size (dir n fs'' :: nil) H). pattern (size fs'') at 1.
-        rewrite <- Nat.add_0_l. apply Nat.add_lt_le_mono; auto.
+      * rewrite (split_size (dir n fs'' :: nil) H). auto.
     + apply size_ge_0.
 Qed.
 
@@ -213,9 +211,7 @@ Proof.
     rewrite <- Nat.add_0_r. apply Nat.add_lt_le_mono.
     + assert ((dir n nil :: nil, fs'0) = fs_split (dir n fs'0 :: nil)).
       * unfold fs_split. simpl. rewrite app_nil_r. reflexivity.
-      * rewrite (split_size (dir n fs'0 :: nil) H0).
-        rewrite (split_l_size (dir n fs'0 :: nil) H0). pattern (size fs'0) at 1.
-        rewrite <- Nat.add_0_l. apply Nat.add_lt_le_mono; auto.
+      * rewrite (split_size (dir n fs'0 :: nil) H0). auto.
     + apply size_ge_0.
 Qed.
 
@@ -312,7 +308,6 @@ Proof.
   assert (H1 := Heqp). unfold fs_split in H1. simpl in H1.
   rewrite app_nil_r in H1. rewrite Heqp in H1. symmetry in H1. clear Heqp p.
   rewrite (split_size (dir n (fs1 ++ fs2) :: nil) H1).
-  rewrite (split_l_size (dir n (fs1 ++ fs2) :: nil) H1). simpl.
   assert (dir n1 fs1 :: dir n2 fs2 :: nil =
           (dir n1 fs1 :: nil) ++ (dir n2 fs2 :: nil)).
   1:reflexivity. rewrite H2. do 2 rewrite size_concat.
@@ -320,12 +315,10 @@ Proof.
   assert (H3 := Heqp). unfold fs_split in H3. simpl in H3.
   rewrite app_nil_r in H3. rewrite Heqp in H3. symmetry in H3. clear Heqp p.
   rewrite (split_size (dir n1 fs1 :: nil) H3).
-  rewrite (split_l_size (dir n1 fs1 :: nil) H3).
   remember (fs_split (dir n2 fs2 :: nil)) as q.
   assert (H4 := Heqq). unfold fs_split in H4. simpl in H4.
   rewrite app_nil_r in H4. rewrite Heqq in H4. symmetry in H4. clear Heqq q.
-  rewrite (split_size (dir n2 fs2 :: nil) H4).
-  rewrite (split_l_size (dir n2 fs2 :: nil) H4). simpl.
+  rewrite (split_size (dir n2 fs2 :: nil) H4). simpl.
   rewrite <- Nat.succ_lt_mono. apply Nat.add_lt_mono_l. auto.
 Qed.
 
@@ -472,7 +465,7 @@ Proof.
       unfold size. rewrite (fold_level_nil (fun _ => S) O). auto.
     + transitivity
         (size (x1 :: nil) + size (fs_compact_groups gs)).
-      * rewrite <- size_concat. simpl. auto.
+      * rewrite <- size_concat. auto.
       * rewrite map_cons. simpl. apply Nat.add_le_mono_l. assumption.
     + rewrite IHo. simpl. apply Nat.add_le_mono_r. apply Nat.lt_eq_cases.
       left. apply (size_compacted n1 _x _x0 fs' fs1 fs2).
@@ -527,9 +520,8 @@ Proof.
     + remember (fs_split (x :: nil)) as p. assert (H0 := Heqp).
       rewrite teq0 in H0. unfold fs_split in H0. simpl in H0.
       rewrite Heqp in H0. clear Heqp p. rewrite app_nil_r in H0.
-      symmetry in H0. rewrite (split_size (x :: nil) H0).
-      rewrite (split_l_size (x :: nil) H0). simpl. apply Nat.lt_succ_r.
-      apply fs_compact_level_dec.
+      symmetry in H0. rewrite (split_size (x :: nil) H0). simpl.
+      apply Nat.lt_succ_r. apply fs_compact_level_dec.
     + apply size_ge_0.
 Qed.
 

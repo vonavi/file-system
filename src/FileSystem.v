@@ -213,7 +213,7 @@ Section FSTree.
   Definition size (fs:FileSystem Name Tag) : nat := fold_level (fun _ => S) O fs.
 
   Lemma split_size : forall (fs l r:FileSystem Name Tag),
-      (l, r) = fs_split fs -> size fs = size l + size r.
+      (l, r) = fs_split fs -> size fs = length l + size r.
   Proof.
     intros fs. unfold size.
     functional induction (fold_level (fun _ => S) O fs); intros l' r' H.
@@ -221,19 +221,10 @@ Section FSTree.
       reflexivity.
     - rewrite e0 in H. inversion H.
       remember (fold_level (fun _ => S) 0 r) as n.
-      symmetry in e0. rewrite (split_l_fold_level (fun _ => S) 0 fs e0).
       clear IHs H H1 H2 Heqn e0 fs l' r r' y. induction l. 1:reflexivity.
       simpl. rewrite IHl. reflexivity.
   Qed.
   Arguments split_size {_ _ _}.
-
-  Lemma split_l_size : forall (fs l r:FileSystem Name Tag),
-      (l, r) = fs_split fs -> size l = length l.
-  Proof.
-    intros. unfold size. rewrite (split_l_fold_level (fun _ => S) 0 fs H).
-    clear H fs r. induction l. 1:reflexivity. simpl. rewrite IHl. reflexivity.
-  Qed.
-  Arguments split_l_size {_ _ _}.
 
   Lemma size_ge_0 : forall (fs:FileSystem Name Tag), 0 <= size fs.
   Proof.
@@ -241,8 +232,8 @@ Section FSTree.
     - unfold size. rewrite fold_level_nil. trivial.
     - symmetry in e0. rewrite (split_size e0). pattern 0. rewrite <- Nat.add_0_r.
       apply Nat.add_le_mono.
-      + rewrite (split_l_size e0). clear e0 IHs fs r y.
-        induction l. 1:reflexivity. simpl. revert IHl. apply Nat.le_le_succ_r.
+      + clear e0 IHs fs r y. induction l. 1:reflexivity. simpl. revert IHl.
+        apply Nat.le_le_succ_r.
       + assumption.
   Qed.
 
@@ -255,10 +246,9 @@ Section FSTree.
       rewrite surjective_pairing in Heqp. symmetry in e0.
       pose proof (split_concat fs fs' e0 Heqp). rewrite (split_size H).
       rewrite (IHs (snd p)). rewrite (split_size Heqp).
-      do 2 rewrite Nat.add_assoc. apply Nat.add_cancel_r.
-      rewrite (split_size e0). cut (size (l ++ fst p) = size l + size (fst p)).
+      do 2 rewrite Nat.add_assoc. apply Nat.add_cancel_r. rewrite (split_size e0).
+      cut (length (l ++ fst p) = length l + length (fst p)).
       + intro. rewrite H0. ring.
-      + rewrite (split_l_size H). rewrite (split_l_size e0).
-        rewrite (split_l_size Heqp). apply app_length.
+      + apply app_length.
   Qed.
 End FSTree.
