@@ -79,19 +79,23 @@ lemma lt_le_list:
 
 lemma lt_not_le_list:
   fixes xs ys :: "('a::preorder) list"
-  shows "xs < ys \<Longrightarrow> ys \<le> xs \<Longrightarrow> False" (is "?P \<Longrightarrow> ?Q \<Longrightarrow> ?R")
-proof -
-  have "\<And> x y :: 'a::preorder . x < y \<Longrightarrow> y < x \<Longrightarrow> False"
-    using less_irrefl less_trans by auto
+  shows "xs < ys \<Longrightarrow> ys \<le> xs \<Longrightarrow> False"
+proof (induction xs rule: less_eq_list.induct)
+  case (1 xs)
+  thus ?case by (case_tac xs; auto)
+next
+  case (2 y ys)
+  thus ?case by auto
+next
+  case (3 x xs y ys)
   moreover
-  have "\<And> x y :: 'a::preorder . x < y \<Longrightarrow> y \<le> x \<Longrightarrow> False"
-    using less_irrefl le_less_trans by auto
+  have "x < y \<Longrightarrow> y < x \<Longrightarrow> False"
+    using less_irrefl less_trans by blast
   moreover
-  have "\<And> x y :: 'a::preorder . x \<le> y \<Longrightarrow> y < x \<Longrightarrow> False"
-    using less_irrefl le_less_trans by auto
+  have "\<And> x y :: 'a::preorder. x \<le> y \<Longrightarrow> y < x \<Longrightarrow> False"
+    using less_irrefl le_less_trans by blast
   ultimately
-  show "?P \<Longrightarrow> ?Q \<Longrightarrow> ?R"
-    by (induction xs arbitrary: ys; case_tac ys; auto)
+  show ?case by auto
 qed
 
 lemma le_not_le_lt_list:
@@ -103,32 +107,25 @@ lemma le_not_le_lt_list:
 lemma le_trans_list:
   fixes xs ys zs :: "('a::preorder) list"
   shows "xs \<le> ys \<Longrightarrow> ys \<le> zs \<Longrightarrow> xs \<le> zs"
-proof (induction ys arbitrary: xs zs)
-  case Nil
-  thus ?case by (case_tac xs; case_tac zs; auto)
+proof (induction ys arbitrary: xs rule: less_eq_list.induct)
+  case (1 ys)
+  thus ?case by (case_tac xs; case_tac ys; auto)
 next
-  case (Cons y ys)
-  note c = Cons
-  thus ?case
-  proof (cases xs)
-    case Nil thus ?thesis by auto
-  next
-    case (Cons x xs)
-    moreover
-    have "\<And> z . x < y \<Longrightarrow> y < z \<Longrightarrow> \<not> x < z \<Longrightarrow> False"
-      using less_trans by blast
-    moreover
-    have "\<And> z . x \<le> y \<Longrightarrow> y < z \<Longrightarrow> \<not> x < z \<Longrightarrow> False"
-      using le_less_trans by blast
-    moreover
-    have "\<And> z . x < y \<Longrightarrow> y \<le> z \<Longrightarrow> \<not> x < z \<Longrightarrow> False"
-      using less_le_trans by blast
-    moreover
-    have "\<And> z . x \<le> y \<Longrightarrow> y \<le> z \<Longrightarrow> x \<le> z"
-      using order_trans by blast
-    ultimately
-    show ?thesis using c by (case_tac zs; auto)
-  qed
+  case (2 z zs)
+  thus ?case by (case_tac xs; auto)
+next
+  case (3 z zs y ys)
+  moreover
+  have "\<And> x. x < y \<Longrightarrow> y < z \<Longrightarrow> \<not> x < z \<Longrightarrow> False"
+    using less_trans by blast
+  moreover
+  have "\<And> x. x \<le> y \<Longrightarrow> y < z \<Longrightarrow> \<not> x < z \<Longrightarrow> False"
+    using le_less_trans by blast
+  moreover
+  have "\<And> x. x < y \<Longrightarrow> y \<le> z \<Longrightarrow> \<not> x < z \<Longrightarrow> False"
+    using less_le_trans by blast
+  ultimately
+  show ?case using order_trans by (case_tac xs; auto)
 qed
 
 instance proof
