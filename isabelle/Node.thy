@@ -169,11 +169,11 @@ lemma lt_not_le_node:
   shows "xs < ys \<Longrightarrow> ys \<le> xs \<Longrightarrow> False" (is "?P \<Longrightarrow> ?Q \<Longrightarrow> ?R")
 proof -
   have "\<And> x y :: 'n::preorder . x < y \<Longrightarrow> y \<le> x \<Longrightarrow> False"
-    using less_irrefl le_less_trans by auto
+    using less_irrefl le_less_trans by blast
   moreover
   have "\<And> x y :: 'n::preorder \<times> 't::preorder .
          x \<le> y \<Longrightarrow> y < x \<Longrightarrow> False"
-    using less_irrefl le_less_trans by auto
+    using less_irrefl le_less_trans by blast
   ultimately
   show "?P \<Longrightarrow> ?Q \<Longrightarrow> ?R"
     by (case_tac xs; case_tac ys; auto)
