@@ -109,4 +109,37 @@ next
     by auto
 qed
 
+lemma fs_split_level_lt:
+  fixes x :: "('n, 't) node" and xs :: "('n, 't) filesystem"
+  shows "let (_, r) = fs_split (x # xs) in
+    fs_level r < fs_level (x # xs)"
+proof -
+  let ?r = "snd (fs_split (x # xs))"
+  have "max 1 (fs_level (x # xs)) = fs_level (x # xs)"
+    unfolding fs_level_def by (case_tac x; auto)
+  also have "max 1 (fs_level (x # xs)) = Suc (fs_level ?r)"
+    using fs_head_level [of "x # xs"] fs_split_level [of "x # xs"]
+    by auto
+  finally show ?thesis by auto
+qed
+
+function (sequential) fold_level ::
+  "(('n, 't) node \<Rightarrow> 'a \<Rightarrow> 'a) \<Rightarrow> ('n, 't) filesystem \<Rightarrow> 'a \<Rightarrow> 'a"
+  where
+  "fold_level _ Nil a0 = a0" |
+  "fold_level f xs a0 = (
+     let (l, r) = fs_split xs
+     in foldr f l (fold_level f r a0) )"
+  by pat_completeness auto
+termination
+proof (relation "measure (\<lambda>(_, fs, _). fs_level fs)"; auto)
+  fix x :: "('n, 't) node" and xs :: "('n, 't) filesystem"
+  show "\<And> _ _ l r. (l, r) = fs_split (x # xs) \<Longrightarrow>
+    fs_level r < fs_level (x # xs)"
+    using fs_split_level_lt [of x xs] by auto
+qed
+
+definition size :: "('n, 't) filesystem \<Rightarrow> nat" where
+  "size fs = fold_level (\<lambda> _. Suc) fs 0"
+
 end
