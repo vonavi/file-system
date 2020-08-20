@@ -1,7 +1,8 @@
 theory
-  Node
+  FS_Orderings
 imports
   Main
+  FS_Size
 begin
 
 lemma le_imp_not_le_lt:
@@ -138,10 +139,6 @@ instance proof
 qed
 
 end
-
-datatype ('n, 't) node =
-  File "'n \<times> 't" |
-  Dir "'n \<times> (('n, 't) node) list"
 
 instantiation node :: (preorder, preorder) preorder
 begin

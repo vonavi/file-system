@@ -1,9 +1,12 @@
 theory
-  FileSystem
+  FS_Size
 imports
   Main
-  Node
 begin
+
+datatype ('n, 't) node =
+  File "'n \<times> 't" |
+  Dir "'n \<times> (('n, 't) node) list"
 
 type_synonym ('n, 't) filesystem = "('n, 't) node list"
 
@@ -32,13 +35,13 @@ next
 qed
 
 primrec node_split where
-  "node_split (File f) = (File f, Nil)" |
-  "node_split (Dir d) = (Dir (fst d, Nil), snd d)"
+  "node_split (File f) = (File f, [])" |
+  "node_split (Dir d) = (Dir (fst d, []), snd d)"
 
 definition fs_split where
   "fs_split fs = (
     let node_acc = \<lambda> p acc. (fst p # fst acc, snd p @ snd acc) in
-    foldr node_acc (map node_split fs) (Nil, Nil) )"
+    foldr node_acc (map node_split fs) ([], []) )"
 
 lemma split_cons:
   fixes x :: "('n, 't) node" and xs :: "('n, 't) filesystem"
@@ -126,20 +129,51 @@ qed
 function (sequential) fold_level ::
   "(('n, 't) node \<Rightarrow> 'a \<Rightarrow> 'a) \<Rightarrow> ('n, 't) filesystem \<Rightarrow> 'a \<Rightarrow> 'a"
   where
-  "fold_level _ Nil a0 = a0" |
   "fold_level f xs a0 = (
-     let (l, r) = fs_split xs
-     in foldr f l (fold_level f r a0) )"
+     case fs_level xs of
+       0 \<Rightarrow> foldr f xs a0 |
+       Suc _ \<Rightarrow> (
+         let (l, r) = fs_split xs
+         in foldr f l (fold_level f r a0) ))"
   by pat_completeness auto
 termination
 proof (relation "measure (\<lambda>(_, fs, _). fs_level fs)"; auto)
-  fix x :: "('n, 't) node" and xs :: "('n, 't) filesystem"
-  show "\<And> _ _ l r. (l, r) = fs_split (x # xs) \<Longrightarrow>
-    fs_level r < fs_level (x # xs)"
-    using fs_split_level_lt [of x xs] by auto
+  fix xs :: "('n, 't) filesystem"
+  show "\<And>n _ _ l r.
+    fs_level xs = Suc n \<Longrightarrow> (l, r) = fs_split xs \<Longrightarrow>
+    fs_level r < Suc n"
+    using fs_split_level [of xs] by auto
 qed
 
 definition size :: "('n, 't) filesystem \<Rightarrow> nat" where
   "size fs = fold_level (\<lambda> _. Suc) fs 0"
+
+lemma foldr_suc:
+  fixes fs :: "('n, 't) filesystem"
+    and a0 :: nat
+  shows "foldr (\<lambda> _. Suc) fs (Suc a0) =
+    Suc (foldr (\<lambda> _. Suc) fs a0)"
+  by (induction fs; auto)
+
+lemma fold_level_suc [simp]:
+  fixes fs :: "('n, 't) filesystem"
+    and a0 :: nat
+  shows "fold_level (\<lambda> _. Suc) fs (Suc a0) =
+    Suc (fold_level (\<lambda> _. Suc) fs a0)"
+proof (induction "fs_level fs" arbitrary: fs)
+  case 0
+  thus ?case using foldr_suc [of fs] by auto
+next
+  case (Suc n)
+  let ?r = "snd (fs_split fs)"
+  have "fs_level ?r = n"
+    using fs_head_level [of fs] fs_split_level [of fs]
+    using Suc.hyps by auto
+  hence "fold_level (\<lambda> _. Suc) ?r (Suc a0) =
+    Suc (fold_level (\<lambda> _. Suc) ?r a0)"
+    using Suc.hyps by blast
+  thus ?case using foldr_suc
+    by (case_tac "fs_level fs"; case_tac "fs_split fs"; auto)
+qed
 
 end

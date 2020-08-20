@@ -1,4 +1,4 @@
 session FileSystem = HOL +
 theories
-  FileSystem
-  Node
+  FS_Orderings
+  FS_Size
