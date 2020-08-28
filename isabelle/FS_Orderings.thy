@@ -10,7 +10,7 @@ lemma le_imp_not_le_lt:
   shows "x \<le> y \<Longrightarrow> \<not> y \<le> x \<longleftrightarrow> x < y"
   using less_le_not_le by blast
 
-instantiation prod :: (preorder, preorder) preorder
+instantiation prod :: (ord, ord) ord
 begin
 
 definition less_eq_prod:
@@ -20,6 +20,13 @@ definition less_eq_prod:
 definition less_prod:
   "less_prod p\<^sub>x p\<^sub>y \<longleftrightarrow>
      fst p\<^sub>x < fst p\<^sub>y \<or> (fst p\<^sub>x \<le> fst p\<^sub>y \<and> snd p\<^sub>x < snd p\<^sub>y)"
+
+instance proof qed
+
+end
+
+instantiation prod :: (preorder, preorder) preorder
+begin
 
 lemma order_trans_prod:
   fixes p\<^sub>x p\<^sub>y p\<^sub>z :: "'n::preorder \<times> 't::preorder"
@@ -57,6 +64,20 @@ qed
 
 end
 
+instantiation prod :: (linorder, linorder) linorder
+begin
+
+instance proof
+  fix p\<^sub>x p\<^sub>y :: "'n::linorder \<times> 't::linorder"
+  show "p\<^sub>x \<le> p\<^sub>y \<Longrightarrow> p\<^sub>y \<le> p\<^sub>x \<Longrightarrow> p\<^sub>x = p\<^sub>y"
+    unfolding less_eq_prod by (auto simp add: prod_eq_iff)
+  show "p\<^sub>x \<le> p\<^sub>y \<or> p\<^sub>y \<le> p\<^sub>x"
+    unfolding less_eq_prod by auto
+qed
+
+end
+
+(*
 instantiation list :: (preorder) preorder
 begin
 
@@ -140,14 +161,66 @@ qed
 
 end
 
-instantiation node :: (preorder, preorder) preorder
+instantiation list :: (linorder) linorder
 begin
 
-fun less_eq_node where
+instance proof
+  fix xs ys :: "('a::linorder) list"
+  show "xs \<le> ys \<Longrightarrow> ys \<le> xs \<Longrightarrow> xs = ys"
+    by (induction xs arbitrary: ys; case_tac ys; auto)
+  show "xs \<le> ys \<or> ys \<le> xs"
+    by (induction xs arbitrary: ys; case_tac ys; auto)
+qed
+
+end
+*)
+
+instantiation node :: (ord, ord) ord
+begin
+
+function (sequential) less_eq_node ::
+  "('n::ord, 't::ord) node \<Rightarrow> ('n, 't) node \<Rightarrow> bool"
+  and less_eq_list ::
+  "('n, 't) filesystem \<Rightarrow> ('n, 't) filesystem \<Rightarrow> bool"
+  where
   "less_eq_node (File f\<^sub>x) (File f\<^sub>y) \<longleftrightarrow> f\<^sub>x \<le> f\<^sub>y" |
   "less_eq_node (File f\<^sub>x) (Dir d\<^sub>y) \<longleftrightarrow> fst f\<^sub>x \<le> fst d\<^sub>y" |
   "less_eq_node (Dir f\<^sub>x) (File d\<^sub>y) \<longleftrightarrow> fst f\<^sub>x < fst d\<^sub>y" |
-  "less_eq_node (Dir d\<^sub>x) (Dir d\<^sub>y) \<longleftrightarrow> fst d\<^sub>x \<le> fst d\<^sub>y"
+  "less_eq_node (Dir d\<^sub>x) (Dir d\<^sub>y) \<longleftrightarrow>
+    fst d\<^sub>x < fst d\<^sub>y \<or>
+      (fst d\<^sub>x \<le> fst d\<^sub>y \<and> less_eq_list (snd d\<^sub>x) (snd d\<^sub>y))" |
+
+  "less_eq_list [] _ \<longleftrightarrow> True" |
+  "less_eq_list _ [] \<longleftrightarrow> False" |
+  "less_eq_list (x # xs) (y # ys) \<longleftrightarrow>
+     x < y \<or> (less_eq_node x y \<and> less_eq_list xs ys)"
+  by pat_completeness auto
+
+termination
+proof
+  let ?R = "\<lambda>x. case x of
+    Inl (x, _) \<Rightarrow> size [x] |
+    Inr (fs, _) \<Rightarrow> size fs"
+  show "wf (measure ?R)" by auto
+next
+  let ?R = "\<lambda>x. case x of
+    Inl (x, _) \<Rightarrow> size [x] |
+    Inr (fs, _) \<Rightarrow> size fs"
+  show "\<And> d\<^sub>x d\<^sub>y.
+    (Inr (snd d\<^sub>x, snd d\<^sub>y), Inl (Dir d\<^sub>x, Dir d\<^sub>y)) \<in> measure ?R"
+    unfolding fs_level_def by auto
+next
+  let ?R = "\<lambda>x. case x of
+    Inl (x, _) \<Rightarrow> node_level x |
+    Inr (fs, _) \<Rightarrow> fs_level fs"
+  show "\<And> x xs y ys.
+    (Inl (x, y), Inr (x # xs, y # ys)) \<in> measure ?R"
+    unfolding fs_level_def by auto
+
+(*
+ "wf ?R" by auto
+proof (relation "measure ?R"; auto)
+*)
 
 fun less_node where
   "less_node (File f\<^sub>x) (File f\<^sub>y) \<longleftrightarrow> f\<^sub>x < f\<^sub>y" |

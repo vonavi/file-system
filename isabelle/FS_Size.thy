@@ -18,6 +18,26 @@ fun node_level :: "('n, 't) node \<Rightarrow> nat" where
 definition fs_level :: "('n, 't) filesystem \<Rightarrow> nat" where
   "fs_level fs = foldr (\<lambda> x. max (node_level x)) fs 0"
 
+lemma level_eq [simp]:
+  fixes x :: "('n, 't) node"
+  shows "fs_level [x] = node_level x"
+  unfolding fs_level_def by auto
+
+lemma level_eq_0 [simp]:
+  fixes fs :: "('n, 't) filesystem"
+  assumes A: "fs_level fs = 0"
+  shows "fs = []"
+proof (cases fs)
+  case Nil
+  thus ?thesis by blast
+next
+  case (Cons f fs)
+  moreover
+  have "node_level f \<ge> 1" by (case_tac f; auto)
+  ultimately
+  show ?thesis using A unfolding fs_level_def by auto
+qed
+
 lemma level_cons:
   fixes x :: "('n, 't) node" and xs :: "('n, 't) filesystem"
   shows "fs_level (x # xs) = max (node_level x) (fs_level xs)"
@@ -43,6 +63,11 @@ definition fs_split where
     let node_acc = \<lambda> p acc. (fst p # fst acc, snd p @ snd acc) in
     foldr node_acc (map node_split fs) ([], []) )"
 
+lemma split_eq [simp]:
+  fixes x h :: "('n, 't) node" and t :: "('n, 't) filesystem"
+  shows "node_split x = (h, t) \<Longrightarrow> fs_split [x] = ([h], t)"
+  unfolding fs_split_def by auto
+
 lemma split_cons:
   fixes x :: "('n, 't) node" and xs :: "('n, 't) filesystem"
   shows "let (h, t) = node_split x in
@@ -63,6 +88,20 @@ next
   thus ?case
     using split_cons [of x xs] split_cons [of x "xs @ xs'"]
     by auto
+qed
+
+lemma split_split_left:
+  fixes fs :: "('n, 't) filesystem"
+  shows "let (l, _) = fs_split fs in fs_split l = (l, [])"
+proof (induction fs)
+  case Nil
+  show ?case unfolding fs_split_def by auto
+next
+  case (Cons f fs)
+  thus ?case
+    using split_cons [of f fs]
+    unfolding fs_split_def
+    by (case_tac f; auto)
 qed
 
 lemma node_head_level [simp]:
@@ -110,20 +149,6 @@ next
     using node_head_level [of x] node_split_level [of x]
     using fs_head_level [of xs]
     by auto
-qed
-
-lemma fs_split_level_lt:
-  fixes x :: "('n, 't) node" and xs :: "('n, 't) filesystem"
-  shows "let (_, r) = fs_split (x # xs) in
-    fs_level r < fs_level (x # xs)"
-proof -
-  let ?r = "snd (fs_split (x # xs))"
-  have "max 1 (fs_level (x # xs)) = fs_level (x # xs)"
-    unfolding fs_level_def by (case_tac x; auto)
-  also have "max 1 (fs_level (x # xs)) = Suc (fs_level ?r)"
-    using fs_head_level [of "x # xs"] fs_split_level [of "x # xs"]
-    by auto
-  finally show ?thesis by auto
 qed
 
 function (sequential) fold_level ::
@@ -175,5 +200,190 @@ next
   thus ?case using foldr_suc
     by (case_tac "fs_level fs"; case_tac "fs_split fs"; auto)
 qed
+
+lemma fold_level_comm:
+  fixes xs :: "('n, 't) filesystem"
+    and a0 :: nat
+  shows "let (l, r) = fs_split xs in
+    foldr (\<lambda> _. Suc) l (fold_level (\<lambda> _. Suc) r a0) =
+    fold_level (\<lambda> _. Suc) r (foldr (\<lambda> _. Suc) l a0)"
+proof (induction xs)
+  case Nil
+  show ?case unfolding fs_split_def by auto
+next
+  case (Cons x xs)
+  show ?case
+    using Cons.IH split_cons [of x xs] split_split_left [of "x # xs"]
+    by auto
+
+lemma size_comm:
+  fixes xs ys :: "('n, 't) filesystem"
+  shows "size (xs @ ys) = size (ys @ xs)"
+proof (induction xs arbitrary: ys)
+  case Nil
+  show ?case by auto
+next
+  case (Cons x xs)
+  show ?case
+    using Cons.IH [of ys]
+    unfolding size_def
+    by auto
+  proof (induction ys arbitrary: xs)
+    case Nil
+    show ?case by auto
+  next
+    case (Cons y ys)
+    show ?case using Cons.IH [of "y # xs"] by auto
+
+proof (induction x arbitrary: xs rule: node_level.induct)
+  case (1 f)
+  show ?case
+    unfolding size_def
+    using split_cons [of "File f" xs] by auto
+    by (case_tac xs; auto)
+
+lemma node_size_comm:
+  fixes x y :: "('n, 't) node"
+  shows "size [x, y] = size [y, x]"
+proof (cases x)
+  case (File f)
+  show ?thesis
+    unfolding size_def
+    using split_cons [of x "[y]"] split_cons [of "y" "[x]"]
+    by auto
+
+lemma size_in_list:
+  fixes xs ys :: "('n, 't) filesystem"
+  shows "(\<And> x. x \<in> set xs \<Longrightarrow>
+      size (x # ys) = size [x] + size ys) \<Longrightarrow>
+    size (xs @ ys) = size xs + size ys"
+proof (induction xs arbitrary: ys)
+  case Nil
+  show ?case unfolding size_def by auto
+next
+  case (Cons x xs)
+  print_cases
+  show ?case
+    using Cons.prems [of x] Cons.IH [of "x # ys"]
+    by auto
+    (*using Cons.IH [of "xs @ ys"]*)
+
+  thus ?case by auto
+
+(*
+lemma size_split:
+  fixes xs :: "('n, 't) filesystem"
+  shows "let (l, r) = fs_split xs in size xs = length l + size r"
+proof (induction xs)
+  case Nil
+  show ?case unfolding fs_split_def by auto
+next
+  case (Cons x xs)
+  thus ?case by auto
+*)
+lemma size_cons:
+  fixes x :: "('n, 't) node" and xs :: "('n, 't) filesystem"
+  shows "size (x # xs) = size [x] + size xs"
+proof (induction x arbitrary: xs rule: node_level.induct)
+  case (1 f)
+  show ?case
+    unfolding size_def
+    using split_cons [of "File f" xs]
+    by (case_tac xs; auto)
+next
+  case (2 d)
+  let ?r = "snd (fs_split xs)"
+  show ?case
+    unfolding size_def
+    using "2.IH" [of _ ?r] split_cons [of "Dir d" xs]
+    by auto
+
+
+  case Nil
+  show ?case unfolding size_def by auto
+next
+  case (Cons x xs)
+  show ?case
+(*    using Cons.IH [of x'] split_cons [of x "x' # xs"]*)
+    unfolding size_def
+    by auto
+
+lemma size_cons:
+  fixes x :: "('n, 't) node" and xs :: "('n, 't) filesystem"
+  shows "size (x # xs) = size [x] + size xs"
+proof (induction xs arbitrary: x)
+  case Nil
+  show ?case unfolding size_def by auto
+next
+  case (Cons x' xs)
+  show ?case
+    using Cons.IH [of x'] split_cons [of x "x' # xs"]
+    unfolding size_def
+    by auto
+
+
+  have "\<And> l r. fs_split [] = (l, r) \<Longrightarrow> l = [] \<and> r = []"
+    unfolding fs_split_def by auto
+  thus ?thesis
+    unfolding fs_level_def size_def
+    using split_cons [of x xs] split_cons [of x Nil] by auto
+
+proof (induction xs arbitrary: x)
+  case Nil
+  show ?case unfolding size_def by auto
+next
+  case (Cons x xs)
+  thus ?case unfolding size_def by auto
+
+lemma concat_size:
+  fixes xs ys :: "('n, 't) filesystem"
+  shows "size (xs @ ys) = size xs + size ys"
+proof (induction xs)
+  case Nil
+  show ?case unfolding size_def by auto
+next
+  case (Cons x xs)
+  thus ?case unfolding size_def by auto
+
+(*
+lemma split_size_l:
+  fixes fs :: "('n, 't) filesystem"
+  shows "let (l, _) = fs_split fs in size l = length l"
+proof (induction fs)
+  case Nil
+  show ?case unfolding fs_split_def size_def by auto
+next
+  case (Cons f fs)
+  thus ?case 
+    using split_cons [of f fs] by auto
+*)
+
+lemma split_size:
+  fixes fs :: "('n, 't) filesystem"
+  shows "let (l, r) = fs_split fs in
+    size fs = size l + size r"
+proof (induction fs)
+  case Nil
+  show ?case unfolding fs_split_def size_def by auto
+next
+  case (Cons f fs)
+  thus ?case using split_cons [of f fs] by auto
+
+  let ?l = "fst (fs_split fs)"
+  have "size ?l = length ?l"
+    unfolding fs_split_def size_def using split_cons by auto
+  thus ?case unfolding size_def using split_cons [of f fs] by auto
+
+  then show ?case sorry
+next
+  case (2 f v va a0)
+  then show ?case sorry
+qed
+  
+  
+  
+  case (1)
+  thus ?case by auto
+  case (1 a a0)
 
 end
